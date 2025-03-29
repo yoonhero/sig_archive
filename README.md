@@ -27,7 +27,8 @@ further reading:
 _궁금증을 가질만한 질문들_
 
 1. boundary의 문제: 어딜 경계로 두 데이터가 나누어지는지 (hallucination+bayes optimization)
+    - P(Y, X)/P(X) vs P(Y|X)
 2. 일반화는 어떻게 이루어지는거지?: test set의 비율을 조정하면서 실험해보기
 3. 좌표계를 그렇게 왜곡시켰는데 파라메터 공간에 대해서 일반적인 GD를 쓸 수 있나?: Riemmanian metric+Natural Gradient
 
--   [Loss surface](./week01/loss_surface.ipynb) visualization of your model! (why residual connection is GOD.)
+-   [Loss surface](./week01/loss surface.ipynb) visualization of your model! (why residual connection is GOD.)
