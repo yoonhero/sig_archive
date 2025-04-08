@@ -72,6 +72,6 @@ About dataset
 
 > win the "tung tung tung tung sahur"
 
-<a target="_blank" href="https://colab.research.google.com/github/yoonhero/sig_archive/blob/main/hw/example_code.ipyng">
+<a target="_blank" href="https://colab.research.google.com/github/yoonhero/sig_archive/blob/main/hw/example_code.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
