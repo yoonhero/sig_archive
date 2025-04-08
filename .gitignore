@@ -174,3 +174,8 @@ cython_debug/
 .pypirc
 
 *.mp4
+
+hw/frontend
+hw/MNIST
+sol.txt
+positional_emb.ipynb

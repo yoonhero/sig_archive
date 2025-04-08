@@ -58,3 +58,20 @@ _궁금증을 가질만한 질문들_
     -   [Visualization by cs231n](https://www.youtube.com/watch?v=ta5fdaqDT3M)
 
 **Week02: 역사를 훑다**
+
+**About HW**
+
+difficult mnist by me!
+
+About dataset
+
+-   이미지 크기 (3x64x64)입니다.
+-   3가지 색깔로 이루어진 펜으로 5가지 질감과 색이 다른 종이에 쓰인 숫자를 맞춰야 합니다.
+-   숫자는 0-9로 구성되어 있습니다.
+-   숫자의 위치는 랜덤하게 설정되었고, 숫자의 크기 도한 랜덤하게 설정되었습니다.
+
+> win the "tung tung tung tung sahur"
+
+<a target="_blank" href="https://colab.research.google.com/github/yoonhero/sig_archive/blob/main/hw/example_code.ipyng">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
