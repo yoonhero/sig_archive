@@ -39,9 +39,9 @@ _궁금증을 가질만한 질문들_
 2. 일반화는 어떻게 이루어지는거지?: test set의 비율을 조정하면서 실험해보기
 3. 좌표계를 그렇게 왜곡시켰는데 파라메터 공간에 대해서 일반적인 GD를 쓸 수 있나?: Riemmanian metric+Natural Gradient
 
--   [Loss surface](./week01/loss_surface.ipynb) visualization of your model! (why residual connection is GOD.)
+#### [Loss surface](./week01/loss_surface.ipynb) visualization of your model! (why residual connection is GOD.)
 
-#### ![loss_landscape](./week01/docs/loss_landscape.jpg)
+![loss_landscape](./week01/docs/loss_landscape.jpg)
 
 GD를 직관적으로 이해하기 위해 parameter space에서 정의되는 loss function을 생각해보자. 특정 parameter 벡터가 입력되면 loss 값이 출력으로 나오는 function 말이다. 특정 시점에서 parameter 입력이 주어졌을 때 GD를 통해서 우리는 loss가 최소화되는 지점에 다다르고 싶어한다. 모든 parameter space에 대한 탐색은 costy하고 in-tractable하기 때문에 iteration을 거듭하면서 더 나은 결과를 기대하는 것이 Gradient Descent(Back propagation)이다.
 
