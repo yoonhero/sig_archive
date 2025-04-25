@@ -1,14 +1,22 @@
 # For ML/DL/RL/... beginners
 
-**Week01: 딥러닝 들어가기**
+인공지능은 다학문적인 면모를 보입니다. 옳은 접근 방법보다, 더 넓고 깊게 볼 수 있는 시야를 이 repo를 통해 얻으셨으면 합니다. ML/DL/RL을 시작하려는 beginner or noob부터 이 분야에 무르익었지만 새로운 자극이 필요하신 분까지 조금이나마 불꽃이 되기를 빕니다. 점입가경하시기를.
+
+**One thing you remember: **
+
+-   본 REPO는 2025 SCSC동아리 1학기 SIG 진행을 기록합니다.
+-   자신이 `아는것/좋아하는것/...` 많이 공유해주세요. 꽁꽁 싸매는 것보다 아무것도 아닐 수 없는 일은 없죠.
+-   `의견/질문/오류지적`이 있으시다면 yoonhero06@naver.com으로~
+
+## **Week01: 딥러닝 들어가기**
 
 1. 수학적 이해: 비선형성, 오차역전파, MLE, 손실 함수, representation learning
 2. 왜 단순한 행렬곱과 비선형성만으로는 chatgpt와 같이 복잡한 학습이 어려운가?: inductive bias에 대하여(CNN, RNN, attention mechanism) + Loss surface
 3. ANN의 문제를 어떻게 해결했는가?: normalization, regularization, optimizing, architecture
 
-further reading:
+### further reading:
 
--   _[Manifold](./week01/manifold_study.ipynb) Visualization_
+#### _[Manifold](./week01/manifold_study.ipynb) Visualization_
 
 ![spiral](./week01/docs/spiral.jpg)
 
@@ -33,7 +41,7 @@ _궁금증을 가질만한 질문들_
 
 -   [Loss surface](./week01/loss_surface.ipynb) visualization of your model! (why residual connection is GOD.)
 
-![loss_landscape](./week01/docs/loss_landscape.jpg)
+#### ![loss_landscape](./week01/docs/loss_landscape.jpg)
 
 GD를 직관적으로 이해하기 위해 parameter space에서 정의되는 loss function을 생각해보자. 특정 parameter 벡터가 입력되면 loss 값이 출력으로 나오는 function 말이다. 특정 시점에서 parameter 입력이 주어졌을 때 GD를 통해서 우리는 loss가 최소화되는 지점에 다다르고 싶어한다. 모든 parameter space에 대한 탐색은 costy하고 in-tractable하기 때문에 iteration을 거듭하면서 더 나은 결과를 기대하는 것이 Gradient Descent(Back propagation)이다.
 
@@ -49,17 +57,41 @@ _궁금증을 가질만한 질문들_
 2. SGD의 loss surface는?: SGD는 배치의 샘플링 과정을 통해서 통계적 안정성을 얻을 수 있다. 위의 상황처럼 GD의 loss surface의 경우와 다르게 SGD의 경우는 어떻게 해석해야 할까?
 3. training dataset vs test dataset -> 서로 loss surface가 어떻게 다를까?
 
--   Related Resources
-    -   [Loss Surface](https://arxiv.org/pdf/1712.09913)
-    -   [Capsule nets](https://medium.com/ai³-theory-practice-business/understanding-hintons-capsule-networks-part-i-intuition-b4b559d1159b)
-    -   [How Embedding Works](https://github.com/colah/NLP-RNNs-Representations-Post/blob/master/index.md)
-    -   [Gradient Vector](https://en.wikipedia.org/wiki/Gradient)
-    -   [What is convolution](https://www.youtube.com/watch?v=KuXjwB4LzSA)
-    -   [Visualization by cs231n](https://www.youtube.com/watch?v=ta5fdaqDT3M)
+#### Related Resources
 
-**Week02: 역사를 훑다**
+-   [Loss Surface](https://arxiv.org/pdf/1712.09913)
+-   [Capsule nets](https://medium.com/ai³-theory-practice-business/understanding-hintons-capsule-networks-part-i-intuition-b4b559d1159b)
+-   [How Embedding Works](https://github.com/colah/NLP-RNNs-Representations-Post/blob/master/index.md)
+-   [Gradient Vector](https://en.wikipedia.org/wiki/Gradient)
+-   [What is convolution](https://www.youtube.com/watch?v=KuXjwB4LzSA)
+-   [Visualization by cs231n](https://www.youtube.com/watch?v=ta5fdaqDT3M)
 
-**About HW**
+## **Week02: 역사를 훑다**
+
+1. 시퀀스를 이해하는 방법: Markov Process, RNN, Residual Mapping, Forget Gate
+2. About language: Language level(0~3), combining Low-entropy pair(BPE, tokenizers..)
+3. Attention is all you need: Let you know your Pos!, Give you a Context!
+4. Topology on Linear Projection: Whitney-Embedding theorem
+
+### further reading:
+
+#### Why positional embedding(arbitrary/absolute) shapes Helix?
+
+...
+
+#### Expands Whitney-Embedding Theorem!
+
+...
+
+#### Related Resources
+
+-   [The Unreasonable Effectiveness of Recurrent Neural Networks](https://karpathy.github.io/2015/05/21/rnn-effectiveness/)
+-   [Identity mapping Cited by 13741](https://arxiv.org/pdf/1603.05027) ---> Quite neat prescription!
+-   [Soft-Attention](https://www.youtube.com/watch?v=ByjaPdWXKJ4&list=PLkt2uSq6rBVctENoVBg1TpCC7OQi31AlC&index=14)
+-   [Language, as distil by me](https://blog.naver.com/yoonhero06/223749063877)
+-   [It's Topology! you have to go back to Math](https://colah.github.io/posts/2014-03-NN-Manifolds-Topology/)
+
+### **About HW(숙제)**
 
 difficult mnist by me!
 
@@ -70,8 +102,10 @@ About dataset
 -   숫자는 0-9로 구성되어 있습니다.
 -   숫자의 위치는 랜덤하게 설정되었고, 숫자의 크기 도한 랜덤하게 설정되었습니다.
 
-> win the "tung tung tung tung sahur"
-
 <a target="_blank" href="https://colab.research.google.com/github/yoonhero/sig_archive/blob/main/hw/example_code.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
+
+## **Week06: PT time**
+
+Strengthen your sight.
