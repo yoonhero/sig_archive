@@ -175,8 +175,9 @@ cython_debug/
 
 *.mp4
 
-hw/frontend
-hw/MNIST
+hw1/frontend
+hw1/MNIST
+hw1/score-board-zenith-view
 sol.txt
 positional_emb.ipynb
 
