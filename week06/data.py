@@ -1,4 +1,3 @@
-import re
 import chess
 import chess.pgn
 import io
@@ -8,10 +7,11 @@ import numpy as np
 username = "yoonhero"
 path = "./my_chess.pgn"
 basics = "pnbrqk"
-pieces = {piece:i for i, piece in enumerate(basics + basics.upper())}
+action_space_size = 4272
+pieces = {piece:i+action_space_size for i, piece in enumerate(basics + basics.upper())}
 itop = {i:piece for piece, i in pieces.items()}
-specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>"]
-special_tokens = {special:i+len(pieces.values()) for i, special in enumerate(specials)}
+specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>", "<legal_moves>"]
+special_tokens = {special:i+len(pieces.values())+action_space_size for i, special in enumerate(specials)}
 tokens = pieces | special_tokens
 
 ME_TOK = "<me>"
@@ -20,6 +20,7 @@ ROWEND_TOK = "<row_end>"
 EMPTY_TOK = "<empty>"
 BOARD_START_TOK = "<board_start>"
 BOARD_END_TOK = "<board_end>"
+LEGAL_MOVES = "<legal_moves>"
 
 def tokenize_fen(fen):
     # 12channels + additional ones?
@@ -27,7 +28,6 @@ def tokenize_fen(fen):
         # queenside for each color)
         # En passant target square (1 channel)
         # Turn indicator (1 channel: whose move it is)
-    # too many! -> move on to token tranformer!
     # rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR
     buffer = []
     buffer.append(tokens[BOARD_START_TOK])
@@ -43,6 +43,7 @@ def tokenize_fen(fen):
     return buffer
 
 alphabets = "abcdefgh" # row:num / col:alphabets
+
 # Return index of UCI move action in action space.
 def encode_uci(move):
     def _encode(square): # (row, col, promotion type(0~4))
@@ -62,7 +63,7 @@ def encode_uci(move):
     return indexified
 
 # convert action into UCI format movement
-def decode_action(action):
+def decode_action(action, verbose=False):
     promotion = ""
     from_row, from_col, to_row, to_col = None, None, None, None
     if action >= 8**4:
@@ -83,7 +84,17 @@ def decode_action(action):
         from_row, from_col, to_row, to_col = map(int, f"{action:04o}") # same as oct(function)
     from_square = alphabets[from_col] + str(from_row+1)
     to_square = alphabets[to_col] + str(to_row+1) + promotion
+    if verbose:
+        return from_square+to_square, (from_row, from_col, to_row, to_col)
     return from_square + to_square
+
+def visualize_action(action):
+    _, (from_row, from_col, to_row, to_col) = decode_action(action, verbose=True)
+    space = [[0]*8 for _ in range(8)]
+    space[from_row][from_col] = -1
+    space[to_row][to_col] = 1
+    for row in space:
+        print(" ".join([f"{n:>2}" for n in row]))
 
 def parse_game(pgn):
     # Protocols                         Type               Unambiguity                   Human friendly
@@ -92,15 +103,9 @@ def parse_game(pgn):
         # types: x(capture), +(check), #(checkmate)
         # pawn capture -> exd5 / promotion -> e8=Q
     # game -> 1. e3 {[%clk 0:09:58.9]} 1... e5 {[%clk 0:09:55.2]} ... 1-0
-
-    #board.push_san("e4") # san(standard algebraic notation) --> only Result vs uci(universal chess interface) --> DAG
-    # moves = [move.split(" ")[0] for move in re.split(r'\d+\.+ ', game)[1:]]
-    # for move in moves:
-    #     board.push_san(move)
-    #     str(board.move_stack[-1])
-    #     fens.append(board.board_fen())
     stream = io.StringIO(pgn)
     game = chess.pgn.read_game(stream)
+    game_result = game.headers.get("Result")
     board = game.board()
     fens = []
     moves = []
@@ -113,31 +118,25 @@ def parse_game(pgn):
         # assert str(move) == decode_action(encode_uci(str(move)))
         moves.append(encoded_move)
 
-    return fens, moves
-
-def doyouwin(line):
-    am_i_white = line[4].split('"')[-2] == username
-    score = line[6].split('"')[-2]
-    if score == "1/2-1/2":
-        return 0.5
-    else:
-        is_white_win = int(score == "1-0")
-        return is_white_win if am_i_white else 1-is_white_win
+    return fens, moves, game_result
 
 def load_data(path):
     games = []
     with open(path, "r", encoding="utf-8") as f:
-        # games = [(parse_game((line:=lines.split("\n"))[-1]), doyouwin(line)) for lines in f.read().split("\n\n\n")[:-1]]
         for line in tqdm.tqdm(f.read().rstrip().split("\n\n\n")):
             games.append(parse_game(line))
         
     return games
 
+def make_dataset(path):
+    data = load_data(path) # (fens, moves, result)
+    
 
 if __name__ == "__main__":
-    data = load_data(path)
-    uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", ]
-    for u in uci:
-        print(f"START {u}")
-        assert decode_action(encode_uci(u)) == u
+    # data = load_data(path)
+    visualize_action(10)
+    # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", ]
+    # for u in uci:
+    #     print(f"START {u}")
+    #     assert decode_action(encode_uci(u)) == u
     # print(decode_action(encode_uci("d7qe8"))=="d7qe8")
