@@ -1,0 +1,93 @@
+<html>
+    <head>
+        <link
+            rel="stylesheet"
+            href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+            integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDISdU"
+            crossorigin="anonymous"
+        />
+    </head>
+
+    <body>
+        <div id="myBoard" style="width: 400px"></div>
+
+        <script
+            src="https://code.jquery.com/jquery-3.5.1.min.js"
+            integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+            integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD"
+            crossorigin="anonymous"
+        ></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+        <script>
+            // Great https://chessboardjs.com/examples#5001
+            var board = null;
+            var game = new Chess();
+
+            function onDragStart(source, piece, position, orientation) {
+                // do not pick up pieces if the game is over
+                if (game.game_over()) return false;
+
+                // only pick up pieces for White
+                if (piece.search(/^b/) !== -1) return false;
+            }
+
+            async function getMove() {
+                const history = game.history({ verbose: true }); // uci + san
+
+                const body = {
+                    history,
+                };
+                const response = await fetch("/move", {
+                    body: JSON.stringify(body),
+                    headers: { "Content-Type": "application/json" },
+                    method: "PUT",
+                });
+                const data = await response.json();
+                // console.log("Engine Selects: " + data.move);
+                console.log(data);
+                game.move(data.move);
+                board.position(game.fen());
+            }
+
+            function onDrop(source, target) {
+                // see if the move is legal
+                var move = game.move({
+                    from: source,
+                    to: target,
+                    promotion: "q", // NOTE: always promote to a queen for example simplicity
+                });
+
+                // illegal move
+                if (move === null) return "snapback";
+
+                if (game.game_over()) {
+                    console.log("GAME FINE");
+                    is_stale = game.in_stalemate();
+                }
+
+                window.setTimeout(getMove, 250);
+            }
+
+            // update the board position after the piece snap
+            // for castling, en passant, pawn promotion
+            function onSnapEnd() {
+                board.position(game.fen());
+            }
+
+            var config = {
+                draggable: true,
+                position: "start",
+                pieceTheme: "https://koblenski.github.io/javascript/chessboardjs-0.3.0/img/chesspieces/wikipedia/{piece}.png",
+                onDragStart: onDragStart,
+                onDrop: onDrop,
+                onSnapEnd: onSnapEnd,
+            };
+            board = Chessboard("myBoard", config);
+        </script>
+    </body>
+</html>
