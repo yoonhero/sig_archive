@@ -112,7 +112,7 @@ class State():
         return ["".join(["." * int(s) if s.isdigit() else s for s in line]) for line in self.board.board_fen().split("/")  ]
     @staticmethod
     def from_fen(fen: str):
-        (board := chess.Board).set_fen(fen)
+        (board := chess.Board()).set_fen(fen)
         return State(board)
     def serialize(self, mode="sequence") -> dtypes.Tokens:
         assert mode in ["sequence", "cnn"], "Please choose the appropriate mode."
