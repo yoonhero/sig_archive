@@ -1,5 +1,3 @@
-# chess_eval.py
-
 # Base material values
 PIECE_VALUES = {
     'P': 100,
