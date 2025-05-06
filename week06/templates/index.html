@@ -42,8 +42,6 @@
             });
             const gameResultQuote = document.querySelector(".gameResult");
 
-            let interval;
-
             function onDragStart(source, piece, position, orientation) {
                 // do not pick up pieces if the game is over
                 if (game.game_over()) return false;
@@ -56,13 +54,12 @@
                 if (data?.game_result) {
                     console.log("GAME FINE");
                     gameResultQuote.innerHTML = `${data?.game_result}`;
-                    if (interval) {
-                        clearInterval(interval);
-                    }
+                    return true;
                 }
+                return false;
             }
 
-            async function fetchMove() {
+            async function fetchMove(self_play = false) {
                 const history = game.history({ verbose: true }); // uci + san
 
                 const body = {
@@ -75,9 +72,14 @@
                     method: "PUT",
                 });
                 const data = await response.json();
+
                 game.move(data.move);
                 board.position(game.fen());
-                checkGameOver(data);
+                const gameOver = checkGameOver(data);
+
+                if (self_play && !gameOver) {
+                    fetchMove(true);
+                }
             }
 
             function onDrop(source, target) {
@@ -112,8 +114,9 @@
             }
 
             startBtn.addEventListener("click", () => {
-                interval = setInterval(fetchMove, 250);
+                // interval = setInterval(fetchMove, 250);
                 startBtn.remove();
+                fetchMove((self_play = true));
             });
 
             if ("{{your_role}}" == "b") {
