@@ -4,15 +4,17 @@ import io
 import tqdm
 import numpy as np
 
+import dtypes 
+
 username = "yoonhero"
 path = "./my_chess.pgn"
 basics = "pnbrqk"
 action_space_size = 4272
-pieces = {piece:i+action_space_size for i, piece in enumerate(basics + basics.upper())}
+pieces = {piece:i for i, piece in enumerate(basics + basics.upper())}
 itop = {i:piece for piece, i in pieces.items()}
 specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>", "<legal_moves>"]
-special_tokens = {special:i+len(pieces.values())+action_space_size for i, special in enumerate(specials)}
-tokens = pieces | special_tokens
+special_tokens = {special:i+len(pieces.values()) for i, special in enumerate(specials)}
+tokens = {k: v+action_space_size for k, v in (pieces | special_tokens).items()}
 
 ME_TOK = "<me>"
 OPPONENT_TOK = "<opponent>"
@@ -22,7 +24,7 @@ BOARD_START_TOK = "<board_start>"
 BOARD_END_TOK = "<board_end>"
 LEGAL_MOVES = "<legal_moves>"
 
-def tokenize_fen(fen):
+def tokenize_fen(fen) -> dtypes.Tokens:
     # 12channels + additional ones?
         # Castling rights (4 channels: kingside)
         # queenside for each color)
@@ -45,7 +47,7 @@ def tokenize_fen(fen):
 alphabets = "abcdefgh" # row:num / col:alphabets
 
 # Return index of UCI move action in action space.
-def encode_uci(move):
+def encode_uci(move: dtypes.UCI) -> dtypes.Action:
     def _encode(square): # (row, col, promotion type(0~4))
         encoded = [int(square[1])-1, alphabets.index(square[0]), 0]
         if len(square) == 3:
@@ -63,7 +65,7 @@ def encode_uci(move):
     return indexified
 
 # convert action into UCI format movement
-def decode_action(action, verbose=False):
+def decode_action(action: dtypes.Action, verbose=False) -> dtypes.UCI:
     promotion = ""
     from_row, from_col, to_row, to_col = None, None, None, None
     if action >= 8**4:
@@ -88,19 +90,21 @@ def decode_action(action, verbose=False):
         return from_square+to_square, (from_row, from_col, to_row, to_col)
     return from_square + to_square
 
-def visualize_action(action):
+def visualize_action(action: dtypes.Action, perspective=chess.WHITE):
     _, (from_row, from_col, to_row, to_col) = decode_action(action, verbose=True)
     space = [[0]*8 for _ in range(8)]
     space[from_row][from_col] = -1
     space[to_row][to_col] = 1
+    if perspective == chess.WHITE:
+        space = space[::-1] # white player perspective rendering
     for row in space:
         print(" ".join([f"{n:>2}" for n in row]))
 
-def parse_game(pgn):
+def parse_game(pgn) -> tuple[any, dtypes.Actions, str]:
     # Protocols                         Type               Unambiguity                   Human friendly
     # UCI(universal chess interface)    Only movement(DAG) None                          No(Engine)
     # SAN(standard algebraic notation)  Including Actions  Probably(Additional notation) Yes(PGN)
-        # types: x(capture), +(check), #(checkmate)
+        # dtypes: x(capture), +(check), #(checkmate)
         # pawn capture -> exd5 / promotion -> e8=Q
     # game -> 1. e3 {[%clk 0:09:58.9]} 1... e5 {[%clk 0:09:55.2]} ... 1-0
     stream = io.StringIO(pgn)
@@ -135,8 +139,8 @@ def make_dataset(path):
 if __name__ == "__main__":
     # data = load_data(path)
     visualize_action(10)
-    # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", ]
-    # for u in uci:
-    #     print(f"START {u}")
-    #     assert decode_action(encode_uci(u)) == u
+    uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]
+    for u in uci:
+        print(f"START {u}")
+        assert decode_action(encode_uci(u)) == u
     # print(decode_action(encode_uci("d7qe8"))=="d7qe8")
