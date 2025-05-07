@@ -11,7 +11,7 @@ python live_chess.py # localhost:8080 for playing!!
 
 ```
 ├── chess.com.py: 자신의 대국 데이터를 chess.com에서 다운로드하기.
-├── data.py: pgn 데이터를 모델 학습할 수 있는 형식으로 바꾸기.(both supported CNN/Sequence Model in progress...)
+├── data.py: pgn 데이터를 모델 학습할 수 있는 형식으로 바꾸기.(both supported CNN/Sequence Model)
     └── 기본적인 학습 logic 제공.
 ├── live_chess.py: 실시간으로 제작한 모델/봇을 웹상에서 테스트하기.
     └── BasicSearchAgent: 기본적인 evaluation을 가지고 minimax 알고리즘을 수행하는 예시
