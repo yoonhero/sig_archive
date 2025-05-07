@@ -4,6 +4,11 @@ import io
 import tqdm
 import numpy as np
 import os
+import multiprocessing
+import sys
+
+# Increase recursion limit to handle deep recursion during pickling
+sys.setrecursionlimit(10000)
 
 from state import State, visualize_action, decode_action, break_down_uci
 from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK
@@ -26,15 +31,18 @@ def pad_sequence_data(vector, max_length):
         vector = np.pad(vector, (0, max_length-len(vector)), mode="constant", constant_values=vectorize(PAD_TOK))
     return vector
 
-def parse_game(pgn, mode="sequence", max_length=140) -> tuple[any, dtypes.Actions, str]:
+def load_game_from_string(pgn: str):
+    stream = io.StringIO(pgn)
+    game = chess.pgn.read_game(stream)
+    return game
+
+def parse_game(game, mode="sequence", max_length=140) -> tuple[any, dtypes.Actions, str]:
     # Protocols                         Type               Unambiguity                   Human friendly
     # UCI(universal chess interface)    Only movement(DAG) None                          No(Engine)
     # SAN(standard algebraic notation)  Including Actions  Probably(Additional notation) Yes(PGN)
         # dtypes: x(capture), +(check), #(checkmate)
         # pawn capture -> exd5 / promotion -> e8=Q
     # game -> 1. e3 {[%clk 0:09:58.9]} 1... e5 {[%clk 0:09:55.2]} ... 1-0
-    stream = io.StringIO(pgn)
-    game = chess.pgn.read_game(stream)
     result = game.headers.get("Result")
     game_result = 1 if result == "1-0" else -1 if result == "0-1" else 0 # 1: white win / -1: black win / 0: draw
     board = game.board()
@@ -50,7 +58,10 @@ def parse_game(pgn, mode="sequence", max_length=140) -> tuple[any, dtypes.Action
         uci = str(move)
         state.push(move)
         if mode == "sequence": # output next_action
-            action = vectorize(uci)
+            try:
+                action = vectorize(uci)
+            except KeyError:
+                raise ValueError("Invalid move")
             vector = prepare_sequence_data(vector, prev_action) + [action]
             vector = np.array(vector)
             vector = pad_sequence_data(vector, max_length)
@@ -72,71 +83,114 @@ def parse_game(pgn, mode="sequence", max_length=140) -> tuple[any, dtypes.Action
         return vectors, actions, [game_result] * len(vectors)
     raise ValueError("Not a normal game")
 
+# Define process_single_game outside of any class to avoid pickling issues
+def process_single_game(args):
+    game, mode, max_length = args
+    try:
+        return parse_game(game, mode, max_length)
+    except ValueError:
+        return None
+
 def load_games(path, mode, max_length=None, save_path=None):
-    total_games = 0
+    processed_games = 0
+    invalid_games = 0
     vectors, actions, results = [], [], []
     if os.path.exists(save_path):
-        print(f"--- Loaded cache to {save_path} ---")
+        print(f"--- Loaded cache from {save_path} ---")
         data = np.load(save_path)
         return data["vectors"], data["actions"], data["results"]
-    with open(path, "r", encoding="utf-8") as f:
-        for line in tqdm.tqdm(f.read().rstrip().split("\n\n\n")):
-            try:
-                _vectors, _actions, _results = parse_game(line, mode, max_length)
-                vectors.extend(_vectors)
-                actions.extend(_actions)
-                results.extend(_results)
-                total_games += 1
-            except ValueError:
-                continue
+    
+    pgn = open(path)
+    games = []
+    while True:
+        try:
+            game = chess.pgn.read_game(pgn)
+        except UnicodeDecodeError:
+            print("UnicodeDecodeError")
+            print(len(games))
+            break
+        if game is not None:
+            games.append(game)
+        else: break
+        if len(games) > 100000: break
+    pgn.close()
+
+    # Use a simpler approach with chunksize to reduce recursion depth
+    tasks = [(g, mode, max_length) for g in games]
+    with multiprocessing.Pool(processes=6) as pool:
+        results_list = pool.map(process_single_game, tasks, chunksize=10)
+        
+    for result in results_list:
+        if result is None:
+            invalid_games += 1
+            continue
+        vectors.extend(result[0])
+        actions.extend(result[1])
+        results.extend(result[2])
+        processed_games += 1
+    
     vectors = np.stack(vectors, axis=0)
     actions = np.stack(actions, axis=0)
     results = np.vstack(results)
     assert vectors.shape[0] == actions.shape[0] == results.shape[0]
-    print(f"Loaded {total_games} games")
+    print(f"Loaded {processed_games} games, {invalid_games} invalid games")
     if save_path:
         print(f"--- Saving to {save_path} ---")
         np.savez(save_path, vectors=vectors, actions=actions, results=results)
     return vectors, actions, results
 
 if __name__ == "__main__":
-    vectors, actions, results = load_games(path, mode, save_path=save_path)
+    vectors, actions, results = load_games(path, mode, max_length=140, save_path=save_path)
     max_length = 73 # only evaluates the board.
-    embedding = 64
-    import torch
-    from state import total_tokens
-    print(f"DS: {total_tokens}")
-    vectors = torch.from_numpy(vectors).to(torch.long)
     vectors = vectors[:, :max_length]
-    results = torch.from_numpy(results).to(torch.float)
+    results = results[:]
+    embedding = 16
+    batch_size = 512
+    import torch
+    from torch.utils.data import Dataset, DataLoader
+    from state import total_tokens
+    device = "cpu"
+    class dataset(Dataset):
+        def __init__(self, vectors, results):
+            self.vectors = vectors
+            self.results = results
+        def __len__(self):
+            return len(self.vectors)
+        def __getitem__(self, idx):
+            return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float)
+    ds = dataset(vectors, results)
+    dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True)
     B, T = vectors.shape
-    batch_size = 128
-    def sampler():
-        while True:
-            yield torch.randint(0, B, (batch_size,), dtype=torch.int)
-    # Simple value network
     model = torch.nn.Sequential(
         torch.nn.Embedding(total_tokens, embedding),
         torch.nn.Flatten(1),
         torch.nn.Linear(max_length*embedding, 512),
-        torch.nn.ReLU(),
-        torch.nn.Linear(512, 1),
-        torch.nn.Tanh()
-    )
+        torch.nn.Tanh(),
+        torch.nn.Dropout(0.5),
+        torch.nn.Linear(512, 256),
+        torch.nn.Tanh(),
+        torch.nn.Dropout(0.5),
+        torch.nn.Linear(256, 1),
+        torch.nn.Tanh(),
+    ).to(device)
     criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-    sample = sampler()
-    for i in range(40):
-        batch_indices = next(sample)
-        _vectors = vectors[batch_indices]
-        _results = results[batch_indices]
-        optimizer.zero_grad()
-        output = model(_vectors)
-        loss = criterion(output, _results)
-        loss.backward()
-        optimizer.step()
-        print(f"step {i+1}, Loss: {loss.item()}")
-    torch.save(model.state_dict(), f"./simple_value_network_{mode}.pth")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005)
+    for epoch in range(20):
+        losses = 0
+        acc = 0
+        for _vectors, _results in tqdm.tqdm(dataloader):
+            optimizer.zero_grad()
+            _vectors = _vectors.to(device)
+            _results = _results.to(device)
+            output = model(_vectors)
+            loss = criterion(output, _results)
+            acc += (output.round() == _results).sum().item()
+            loss.backward()
+            optimizer.step()
+            losses += loss.item()
+        print(f"epoch {epoch+1}, Loss: {losses/len(dataloader):.4f}")
+        print(f"acc: {acc/len(ds):.4f}")
+    torch.save(model.state_dict(), f"./simple_value_network.pth")
 
     # visualize_action(10)
     # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]

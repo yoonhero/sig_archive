@@ -24,6 +24,7 @@ pytorch/tensorflow는 다운로드 방법을 따로 찾아봐요.
 **해볼 만한 도전들**
 
 -   Upgrade evaluation functions: 휴리스틱 함수들 or 딥러닝 모델으로
+    -   Quiescence search: https://en.wikipedia.org/wiki/Quiescence_search
 -   Search deep and thin: 더 깊은 탐색을 하기 위해서는 wide한 탐색을 하지 못한다. 어떤 선택지를 버릴지 휴리스틱하게/딥러닝 모델로 선택해보자.
 -   Optimize search: 현재 minimax search 함수에서 다양한 cache를 통해 최적화! + alpha/beta pruning
     -   Algorithms: https://www.cs.cornell.edu/boom/2004sp/ProjectArch/Chess/algorithms.html#minmax
