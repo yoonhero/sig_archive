@@ -9,6 +9,8 @@ python live_chess.py # localhost:8080 for playing!!
 # specify /?role="b" if you want to play as black else it's randomly chosen.
 ```
 
+pytorch/tensorflow는 다운로드 방법을 따로 찾아봐요.
+
 ```
 ├── chess.com.py: 자신의 대국 데이터를 chess.com에서 다운로드하기.
 ├── data.py: pgn 데이터를 모델 학습할 수 있는 형식으로 바꾸기.(both supported CNN/Sequence Model)

@@ -75,6 +75,7 @@ def encode_uci(move: dtypes.UCI) -> dtypes.Action:
 decoded_actions = {decode_action(action): action for action in range(action_space_size)}
 token_to_index: dict[dtypes.Token, int] = tokens_without_actions | decoded_actions
 index_to_token: dict[int, dtypes.Token] = {index:token for token, index in token_to_index.items()}
+total_tokens = len(token_to_index)
 
 vectorize = lambda token: token_to_index[token]
 tokenize = lambda index: index_to_token[index]

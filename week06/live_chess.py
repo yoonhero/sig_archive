@@ -67,6 +67,10 @@ class RandomAgent(Agent):
 
 # You can build even powerful without complex DLs: following https://www.youtube.com/watch?v=U4ogK0MIzqk
 class BasicSearchAgent(Agent):
+    def __init__(self, state: State, max_depth=4, max_leaf=-1):
+        super().__init__(state)
+        self.max_depth = max_depth
+        self.max_leaf = max_leaf
     def get_candidates(self) -> dtypes.Actions:
         legal_actions = self.state.get_legel_actions()
         return legal_actions
@@ -79,23 +83,45 @@ class BasicSearchAgent(Agent):
         return score if am_i_white else -score
     def predict(self) -> dtypes.UCI:
         start = time.monotonic()
-        next_uci, aggregation = self.minimax_search(max_leaf=-1, max_depth=4)
+        next_uci, aggregation = self.minimax_search(max_leaf=self.max_leaf, max_depth=self.max_depth)
         duration = time.monotonic() - start
         print(f"Search {aggregation}items in {duration}s with {aggregation/duration/1000:.3f}k/s")
-        return next_uci    
+        return next_uci
+    
+class TorchSearchAgent(BasicSearchAgent):
+    def __init__(self, state: State, max_depth=4, max_leaf=-1):
+        super().__init__(state, max_depth, max_leaf)
+        import torch
+        from state import total_tokens
+        self.model = torch.nn.Sequential(
+            torch.nn.Embedding(total_tokens, 64),
+            torch.nn.Flatten(1),
+            torch.nn.Linear(73*64, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 1),
+            torch.nn.Tanh()
+        )
+        self.model.load_state_dict(torch.load("./simple_value_network_sequence.pth", weights_only=True)) # terrible value network!
+    def evaluate_board(self, me: bool) -> float:
+        if self.state.game_over():
+            return float("-inf") if me else float("inf")
+        import torch
+        x = torch.Tensor(self.state.serialize("sequence")[:73]).unsqueeze(0).to(torch.long)
+        score = self.model(x).item()
+        return score
 
 state = State()
 print(state.serialize())
 # print(state.board.turn == chess.WHITE)
 # agent = RandomAgent(state)
-agent = BasicSearchAgent(state)
+agent = TorchSearchAgent(state, max_depth=3, max_leaf=-1)
 
 @app.route("/")
 def play_chess():
     state.reset()
     self_play = request.args.get("self")
-    _your_role = random.choice(["b", "w"]) if not self_play else "w"
-    your_role = request.args.get("role", your_role)
+    your_role_ = random.choice(["b", "w"]) if not self_play else "w"
+    your_role = request.args.get("role", your_role_)
     return render_template("index.html", your_role=your_role, self_play=self_play)
 
 @app.route("/move", methods=["PUT"])

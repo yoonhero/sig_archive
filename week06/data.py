@@ -51,8 +51,7 @@ def parse_game(pgn, mode="sequence", max_length=140) -> tuple[any, dtypes.Action
         state.push(move)
         if mode == "sequence": # output next_action
             action = vectorize(uci)
-            vector = prepare_sequence_data(vector, prev_action)
-            vector += [action]
+            vector = prepare_sequence_data(vector, prev_action) + [action]
             vector = np.array(vector)
             vector = pad_sequence_data(vector, max_length)
             prev_action = action
@@ -73,7 +72,7 @@ def parse_game(pgn, mode="sequence", max_length=140) -> tuple[any, dtypes.Action
         return vectors, actions, [game_result] * len(vectors)
     raise ValueError("Not a normal game")
 
-def load_games(path, mode, save_path=None):
+def load_games(path, mode, max_length=None, save_path=None):
     total_games = 0
     vectors, actions, results = [], [], []
     if os.path.exists(save_path):
@@ -83,7 +82,7 @@ def load_games(path, mode, save_path=None):
     with open(path, "r", encoding="utf-8") as f:
         for line in tqdm.tqdm(f.read().rstrip().split("\n\n\n")):
             try:
-                _vectors, _actions, _results = parse_game(line, mode)
+                _vectors, _actions, _results = parse_game(line, mode, max_length)
                 vectors.extend(_vectors)
                 actions.extend(_actions)
                 results.extend(_results)
@@ -102,12 +101,47 @@ def load_games(path, mode, save_path=None):
 
 if __name__ == "__main__":
     vectors, actions, results = load_games(path, mode, save_path=save_path)
-    # print(State.deserialize(vectors[100], mode), actions[0])
-    # print(vectors.shape, actions.shape, results.shape)
-    visualize_action(10)
-    uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]
-    from state import encode_uci
-    for u in uci:
-        print(f"START {u}")
-        assert decode_action(encode_uci(u)) == u
-    # print(decode_action(encode_uci("d7qe8"))=="d7qe8")
+    max_length = 73 # only evaluates the board.
+    embedding = 64
+    import torch
+    from state import total_tokens
+    print(f"DS: {total_tokens}")
+    vectors = torch.from_numpy(vectors).to(torch.long)
+    vectors = vectors[:, :max_length]
+    results = torch.from_numpy(results).to(torch.float)
+    B, T = vectors.shape
+    batch_size = 128
+    def sampler():
+        while True:
+            yield torch.randint(0, B, (batch_size,), dtype=torch.int)
+    # Simple value network
+    model = torch.nn.Sequential(
+        torch.nn.Embedding(total_tokens, embedding),
+        torch.nn.Flatten(1),
+        torch.nn.Linear(max_length*embedding, 512),
+        torch.nn.ReLU(),
+        torch.nn.Linear(512, 1),
+        torch.nn.Tanh()
+    )
+    criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    sample = sampler()
+    for i in range(40):
+        batch_indices = next(sample)
+        _vectors = vectors[batch_indices]
+        _results = results[batch_indices]
+        optimizer.zero_grad()
+        output = model(_vectors)
+        loss = criterion(output, _results)
+        loss.backward()
+        optimizer.step()
+        print(f"step {i+1}, Loss: {loss.item()}")
+    torch.save(model.state_dict(), f"./simple_value_network_{mode}.pth")
+
+    # visualize_action(10)
+    # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]
+    # from state import encode_uci
+    # for u in uci:
+    #     print(f"START {u}")
+    #     assert decode_action(encode_uci(u)) == u
+    # # print(decode_action(encode_uci("d7qe8"))=="d7qe8")
