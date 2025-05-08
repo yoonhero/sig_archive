@@ -15,9 +15,9 @@ from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK
 import dtypes
 
 username = "yoonhero"
-path = "./my_chess.pgn"
+path = "./data/DATABASE4U.pgn"
 mode = "sequence" # or cnn
-save_path = f"./data/processed/my_chess_{mode}.npz"
+save_path = f"./data/processed/database4u_{mode}.npz"
 
 def prepare_sequence_data(vector, prev_action):
     if prev_action is not None:
@@ -142,9 +142,9 @@ def load_games(path, mode, max_length=None, save_path=None):
 if __name__ == "__main__":
     vectors, actions, results = load_games(path, mode, max_length=140, save_path=save_path)
     max_length = 73 # only evaluates the board.
-    vectors = vectors[:, :max_length]
-    results = results[:]
-    embedding = 16
+    vectors = vectors[:1000, :max_length]
+    results = results[:1000]
+    embedding = 32
     batch_size = 512
     import torch
     from torch.utils.data import Dataset, DataLoader
@@ -190,7 +190,7 @@ if __name__ == "__main__":
             losses += loss.item()
         print(f"epoch {epoch+1}, Loss: {losses/len(dataloader):.4f}")
         print(f"acc: {acc/len(ds):.4f}")
-    torch.save(model.state_dict(), f"./simple_value_network.pth")
+    torch.save(model.state_dict(), f"./model/small.pth")
 
     # visualize_action(10)
     # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]
