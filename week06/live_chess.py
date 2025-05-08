@@ -4,10 +4,13 @@ import random
 from typing import Optional
 from flask import Flask, render_template, request
 import time
+import torch
 
 from eval_example import evaluate_board
 import dtypes
 from state import State, decode_action
+from state import total_tokens
+from benchmark import StockfishOpponent
 
 app = Flask(__name__)
 
@@ -52,7 +55,7 @@ class Agent():
         values = sorted(values, key=lambda x: x[0], reverse=me) # define the current player's strategy
 
         if cur_depth == 0:
-            print([(v, decode_action(c)) for (v, c) in values])
+            # print([(v, decode_action(c)) for (v, c) in values])
             return values[0][1], aggregation
         return values[0][0], aggregation
 
@@ -84,23 +87,10 @@ class BasicSearchAgent(Agent):
         return next_uci
     
 class TorchSearchAgent(BasicSearchAgent):
-    def __init__(self, state: State, max_depth=4, max_leaf=-1):
+    def __init__(self, model, state: State, max_depth=4, max_leaf=-1):
         super().__init__(state, max_depth, max_leaf)
-        import torch
-        from state import total_tokens
-        self.model  = torch.nn.Sequential(
-            torch.nn.Embedding(total_tokens, 16),
-            torch.nn.Flatten(1),
-            torch.nn.Linear(73*16, 512),
-            torch.nn.Tanh(),
-            torch.nn.Dropout(0.5),
-            torch.nn.Linear(512, 256),
-            torch.nn.Tanh(),
-            torch.nn.Dropout(0.5),
-            torch.nn.Linear(256, 1),
-            torch.nn.Tanh(),
-        )
-        self.model.load_state_dict(torch.load("./simple_value_network.pth", weights_only=True)) # terrible value network!
+        self.model = model
+        self.model.load_state_dict(torch.load("./model/small_35.pth", weights_only=True)) # terrible value network!
         self.model.eval()
     def get_candidates(self) -> dtypes.Actions: # explore 1
         legal_actions = self.state.get_legel_actions()
@@ -108,7 +98,6 @@ class TorchSearchAgent(BasicSearchAgent):
     def evaluate_board(self, me: bool) -> float:
         if self.state.game_over():
             return float("-inf") if me else float("inf")
-        import torch
         x = torch.Tensor(self.state.serialize("sequence")[:73]).unsqueeze(0).to(torch.long)
         score = self.model(x).item()
         cur_turn = self.state.board.turn
@@ -116,8 +105,13 @@ class TorchSearchAgent(BasicSearchAgent):
         return score if am_i_white else -score
 
 state = State()
+from data import AttentionV
+from data import embedding, n_layer
+model = AttentionV(embedding=embedding, n_layer=n_layer, max_length=73)
 # agent = BasicSearchAgent(state, max_depth=3)
-agent = TorchSearchAgent(state, max_depth=3, max_leaf=-1)
+agent = TorchSearchAgent(model, state, max_depth=3, max_leaf=-1)
+opponent = StockfishOpponent("/opt/homebrew/bin/stockfish", skill_level=0)
+print(opponent.get_estimated_elo())
 
 @app.route("/")
 def play_chess():
@@ -132,13 +126,23 @@ def move_chesspiece():
     body = request.get_json()
     self_play = body["self_play"] == "1"
     history = body["history"]
+    benchmark = body["benchmark"]
     if history and not self_play:
         prev_move = history[-1]
         uci = prev_move["from"]+prev_move["to"]
         if "promotion" in prev_move:
             uci += prev_move["promotion"]
         state.push_uci(uci)
-    uci_move = agent.respond()
+    if benchmark:
+        if state.board.turn == chess.WHITE:
+            uci_move = agent.respond()
+        else:
+            uci_move = opponent.get_move(state.board)
+            state.attach()
+            state.push(uci_move)
+            state.detach()
+    else:
+        uci_move = agent.respond()
 
     response = {}
     if uci_move is not None:

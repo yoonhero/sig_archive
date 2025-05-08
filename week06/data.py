@@ -11,7 +11,7 @@ import sys
 sys.setrecursionlimit(10000)
 
 from state import State, visualize_action, decode_action, break_down_uci
-from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK
+from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK, total_tokens
 import dtypes
 
 username = "yoonhero"
@@ -139,17 +139,80 @@ def load_games(path, mode, max_length=None, save_path=None):
         np.savez(save_path, vectors=vectors, actions=actions, results=results)
     return vectors, actions, results
 
+import torch.nn
+class AttentionBlock(torch.nn.Module):
+    def __init__(self, demb):
+        super().__init__()
+        self.act = torch.nn.ReLU()
+        self.norm = torch.nn.LayerNorm(demb)
+        self.qkv = torch.nn.Linear(demb, demb*3)
+        self.mlp = torch.nn.Sequential(
+            torch.nn.Linear(demb, demb*3),
+            torch.nn.LayerNorm(demb*3),
+            torch.nn.ReLU(),
+            torch.nn.Linear(demb*3, demb),
+        )
+    def forward(self, x: torch.Tensor):
+        B, T, C = x.shape
+        x = self.qkv(self.act(self.norm((start:=x))))
+        x = x.reshape(B, T, -1, 3)
+        q, k, v = x.chunk(C, dim=-1)
+        k_t = k.transpose(-2, -1)
+        attn = q @ k_t / np.sqrt(C)
+        attn = torch.softmax(attn, dim=-1)
+        out = attn @ v
+        out = out.reshape(B, T, -1)
+        x = self.mlp(out)
+        return x + start
+
+class AttentionV(torch.nn.Module):
+    def __init__(self, embedding, n_layer, max_length):
+        super().__init__()
+        self.embedding = torch.nn.Embedding(total_tokens, embedding)
+        self.blocks = torch.nn.ModuleList([AttentionBlock(embedding) for _ in range(n_layer)])
+        self.norm = torch.nn.LayerNorm(max_length*embedding)
+        self.linear = torch.nn.Linear(max_length*embedding, 1)
+        self.act = torch.nn.Tanh()
+    def forward(self, x):
+        B = x.size(0)
+        x = self.embedding(x)
+        for block in self.blocks:
+            x = block(x)
+        x = x.reshape(B, -1)
+        x = self.act(self.norm(x))
+        x = self.act(self.linear(x))
+        return x
+
+class AttentionPolicy(torch.nn.Module):
+    def __init__(self, embedding, n_layer):
+        super().__init__()
+        self.emb = torch.nn.Embedding(total_tokens, embedding)
+        self.blocks = torch.nn.ModuleList([AttentionBlock(embedding) for _ in range(n_layer)])
+        self.norm = torch.nn.LayerNorm(embedding)
+        self.linear = torch.nn.Linear(embedding, total_tokens)
+        self.act = torch.nn.ReLU()
+    def forward(self, x, train=False):
+        B = x.size(0)
+        x = self.emb((start:=x))
+        for block in self.blocks:
+            x = block(x)
+        x = self.act(self.norm(x))
+        logits = self.linear(x)
+        if train:
+            return torch.nn.functional.cross_entropy(logits[:, 73:-1].view(B, -1, total_tokens), start[:, 74:].view(B, -1), ignore_index=vectorize(PAD_TOK), reduction="mean")
+        return logits
+    
+n_layer = 5
+embedding = 32
+
 if __name__ == "__main__":
     vectors, actions, results = load_games(path, mode, max_length=140, save_path=save_path)
     max_length = 73 # only evaluates the board.
-    vectors = vectors[:1000, :max_length]
-    results = results[:1000]
-    embedding = 32
+    vectors = vectors[:100000, :max_length]
+    results = results[:100000]
     batch_size = 512
-    import torch
     from torch.utils.data import Dataset, DataLoader
-    from state import total_tokens
-    device = "cpu"
+    device = "mps"
     class dataset(Dataset):
         def __init__(self, vectors, results):
             self.vectors = vectors
@@ -158,40 +221,55 @@ if __name__ == "__main__":
             return len(self.vectors)
         def __getitem__(self, idx):
             return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float)
-    ds = dataset(vectors, results)
+    import sklearn.model_selection
+    train_vectors, test_vectors, train_results, test_results = sklearn.model_selection.train_test_split(vectors, results, test_size=0.1, random_state=42)
+    ds = dataset(train_vectors, train_results)
+    test_ds = dataset(test_vectors, test_results)
     dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
     B, T = vectors.shape
-    model = torch.nn.Sequential(
-        torch.nn.Embedding(total_tokens, embedding),
-        torch.nn.Flatten(1),
-        torch.nn.Linear(max_length*embedding, 512),
-        torch.nn.Tanh(),
-        torch.nn.Dropout(0.5),
-        torch.nn.Linear(512, 256),
-        torch.nn.Tanh(),
-        torch.nn.Dropout(0.5),
-        torch.nn.Linear(256, 1),
-        torch.nn.Tanh(),
-    ).to(device)
-    criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005)
-    for epoch in range(20):
-        losses = 0
+            
+    model = AttentionPolicy(embedding, n_layer).to(device)
+    print(sum([p.nelement() for p in model.parameters()]))
+    # criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+    epochs = 20
+    train_losses = []
+    test_losses = []
+    for epoch in range(epochs):
+        loss_ = 0
         acc = 0
         for _vectors, _results in tqdm.tqdm(dataloader):
             optimizer.zero_grad()
             _vectors = _vectors.to(device)
-            _results = _results.to(device)
-            output = model(_vectors)
-            loss = criterion(output, _results)
-            acc += (output.round() == _results).sum().item()
+            # _results = _results.to(device)
+            loss = model(_vectors, True)
+            # loss = criterion(output, _results)
             loss.backward()
             optimizer.step()
-            losses += loss.item()
-        print(f"epoch {epoch+1}, Loss: {losses/len(dataloader):.4f}")
-        print(f"acc: {acc/len(ds):.4f}")
-    torch.save(model.state_dict(), f"./model/small.pth")
-
+            loss_ += loss.item()
+        print(f"epoch {epoch+1}, Loss: {loss_/len(dataloader):.4f}")
+        test_loss_ = 0
+        with torch.no_grad():
+            model.eval()
+            for _vectors, _results in tqdm.tqdm(test_dataloader):
+                _vectors = _vectors.to(device)
+                # _results = _results.to(device)
+                loss = model(_vectors, True)
+                # loss = criterion(output, _results)
+                test_loss_ += loss.item()
+            model.train()
+        print(f"epoch {epoch+1}, Test Loss: {test_loss_/len(test_dataloader):.4f}")
+        train_losses.append(loss_/len(dataloader))
+        test_losses.append(test_loss_/len(test_dataloader))
+        if epoch % 5 == 0:
+            torch.save(model.state_dict(), f"./model/small_{epoch}.pth")
+    import matplotlib.pyplot as plt
+    plt.plot(range(epochs), train_losses, label="train")
+    plt.plot(range(epochs), test_losses, label="test")
+    plt.savefig(f"./model/small_{epochs}.png")
+    plt.legend()
+    plt.show()
     # visualize_action(10)
     # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]
     # from state import encode_uci
