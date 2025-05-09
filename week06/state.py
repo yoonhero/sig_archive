@@ -9,7 +9,7 @@ basics = "pnbrqk"
 action_space_size = 4272
 pieces = {piece:i for i, piece in enumerate(basics + basics.upper())}
 itop = {i:piece for piece, i in pieces.items()}
-specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>", "<legal_moves>", "<white_king>", "<white_queen>", "<black_king>", "<black_queen>", "<pad>"]
+specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>", "<legal_moves>", "<white_king>", "<white_queen>", "<black_king>", "<black_queen>", "<pad>", "<white_turn>", "<black_turn>"]
 special_tokens = {special:i+len(pieces.values()) for i, special in enumerate(specials)}
 tokens_without_actions = {k: v+action_space_size for k, v in (pieces | special_tokens).items()}
 
@@ -27,6 +27,9 @@ WHITE_KINGSIDE_CASTLING = "<white_king>"
 WHITE_QUEENSIDE_CASTLING = "<white_queen>"
 BLACK_KINGSIDE_CASTLING = "<black_king>"
 BLACK_QUEENSIDE_CASTLING = "<black_queen>"
+
+BLACK_TURN = "<black_turn>"
+WHITE_TURN = "<white_turn>"
 
 # convert action into UCI format movement
 def decode_action(action: dtypes.Action, verbose=False) -> dtypes.UCI:
@@ -75,7 +78,7 @@ def encode_uci(move: dtypes.UCI) -> dtypes.Action:
 decoded_actions = {decode_action(action): action for action in range(action_space_size)}
 token_to_index: dict[dtypes.Token, int] = tokens_without_actions | decoded_actions
 index_to_token: dict[int, dtypes.Token] = {index:token for token, index in token_to_index.items()}
-total_tokens = len(token_to_index)
+total_tokens = len(token_to_index) - 2
 
 vectorize = lambda token: token_to_index[token]
 tokenize = lambda index: index_to_token[index]

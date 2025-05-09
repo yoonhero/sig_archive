@@ -16,11 +16,6 @@ from state import State, visualize_action, decode_action, break_down_uci
 from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK, total_tokens
 import dtypes
 
-username = "yoonhero"
-path = "./data/DATABASE4U.pgn"
-mode = "sequence" # or cnn
-save_path = f"./data/processed/database4u_{mode}.npz"
-
 def prepare_sequence_data(vector, prev_action):
     if prev_action is not None:
         vector += [vectorize(OPPONENT_TOK), prev_action]
@@ -28,6 +23,8 @@ def prepare_sequence_data(vector, prev_action):
     return vector
 
 def pad_sequence_data(vector, max_length):
+    if len(vector) > max_length:
+        print(f"EXCEEDS MAX LENGTH with {len(vector)}")
     vector = vector[:max_length]
     if len(vector) < max_length:
         vector = np.pad(vector, (0, max_length-len(vector)), mode="constant", constant_values=vectorize(PAD_TOK))
@@ -64,7 +61,7 @@ def parse_game(game, mode="sequence", max_length=140) -> tuple[any, dtypes.Actio
                 action = vectorize(uci)
             except KeyError:
                 raise ValueError("Invalid move")
-            vector = prepare_sequence_data(vector, prev_action) + [action]
+            vector = prepare_sequence_data(vector, prev_action) + [total_tokens + bool(state.board.turn)] + [action]
             vector = np.array(vector)
             vector = pad_sequence_data(vector, max_length)
             prev_action = action
@@ -114,7 +111,7 @@ def load_games(path, mode, max_length=None, save_path=None):
         if game is not None:
             games.append(game)
         else: break
-        if len(games) > 100000: break
+        if len(games) > 20000: break
     pgn.close()
 
     # Use a simpler approach with chunksize to reduce recursion depth
@@ -141,6 +138,30 @@ def load_games(path, mode, max_length=None, save_path=None):
         np.savez(save_path, vectors=vectors, actions=actions, results=results)
     return vectors, actions, results
 
+board_length = 73 # only evaluates the board.
+n_layer = 5
+embedding = 32
+
+from torch.utils.data import Dataset, DataLoader
+class dataset(Dataset):
+    def __init__(self, vectors, results):
+        self.vectors = vectors
+        self.results = results
+    def __len__(self):
+        return len(self.vectors)
+    def __getitem__(self, idx):
+        return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float)
+
+def make_dataloader(vectors, results):
+    import sklearn.model_selection
+    train_vectors, test_vectors, train_results, test_results = sklearn.model_selection.train_test_split(vectors, results, test_size=0.1, random_state=42)
+    ds = dataset(train_vectors, train_results)
+    test_ds = dataset(test_vectors, test_results)
+    batch_size = 512
+    dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
+    return dataloader, test_dataloader
+
 import torch.nn
 class AttentionBlock(torch.nn.Module):
     def __init__(self, demb, nth_layer):
@@ -154,7 +175,7 @@ class AttentionBlock(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(demb*3, demb),
         )
-        mask = torch.tril(torch.ones(140, 140)).view(1, 140, 140)
+        mask = torch.tril(torch.ones(200, 200)).view(1, 200, 200)
         mask[:, :73, :73] = 1 # mask sure they can view all board
         self.register_buffer("mask", mask.bool())
         self.nth_layer = nth_layer
@@ -191,57 +212,46 @@ class AttentionV(torch.nn.Module):
         return x
 
 class AttentionPolicy(torch.nn.Module):
-    def __init__(self, embedding, n_layer):
+    def __init__(self, embedding, n_layer, with_turn=False):
         super().__init__()
-        self.emb = torch.nn.Embedding(total_tokens, embedding)
+        if with_turn:
+            tokens = total_tokens + 2
+        else: tokens = total_tokens
+        self.emb = torch.nn.Embedding(tokens, embedding)
         self.blocks = torch.nn.ModuleList([AttentionBlock(embedding, i) for i in range(n_layer)])
         self.norm = torch.nn.LayerNorm(embedding)
-        self.linear = torch.nn.Linear(embedding, total_tokens)
+        self.linear = torch.nn.Linear(embedding, tokens)
         self.act = torch.nn.ReLU()
     def forward(self, x, train=False):
-        B = x.size(0)
         x = self.emb((start:=x))
         for block in self.blocks:
             x = block(x)
         x = self.act(self.norm(x))
         logits = self.linear(x)
         if train:
-            return torch.nn.functional.cross_entropy(logits[:, 73:-1].contiguous().view(-1, total_tokens), start[:, 74:].contiguous().view(-1), ignore_index=vectorize(PAD_TOK), reduction="mean")
+            return torch.nn.functional.cross_entropy(logits[:, board_length:-1].contiguous().view(-1, total_tokens+2), start[:, board_length+1:].contiguous().view(-1), ignore_index=vectorize(PAD_TOK), reduction="mean")
         return logits
-    
-n_layer = 5
-embedding = 32
 
 if __name__ == "__main__":
-    vectors, actions, results = load_games(path, mode, max_length=140, save_path=save_path)
+    username = "yoonhero"
+    path = "./data/DATABASE4U.pgn"
+    mode = "sequence" # or cnn
+    save_path = f"./data/processed/database4u_withturn_{mode}.npz"
+    vectors, actions, results = load_games(path, mode, max_length=160, save_path=save_path)
     print(vectors.shape, actions.shape, results.shape)
-    max_length = 73 # only evaluates the board.
-    # vectors = vectors[:10000]
-    # results = results[:10000]
-    batch_size = 512
-    from torch.utils.data import Dataset, DataLoader
+    vectors = vectors[:100000]
+    results = results[:100000]
     device = "mps"
-    class dataset(Dataset):
-        def __init__(self, vectors, results):
-            self.vectors = vectors
-            self.results = results
-        def __len__(self):
-            return len(self.vectors)
-        def __getitem__(self, idx):
-            return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float)
-    import sklearn.model_selection
-    train_vectors, test_vectors, train_results, test_results = sklearn.model_selection.train_test_split(vectors, results, test_size=0.1, random_state=42)
-    ds = dataset(train_vectors, train_results)
-    test_ds = dataset(test_vectors, test_results)
-    dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
-    B, T = vectors.shape
-            
-    model = AttentionPolicy(embedding, n_layer).to(device)
+    dataloader, test_dataloader = make_dataloader(vectors, results)
+
+    # model = AttentionPolicy(32, 5).to(device) -> small
+    # model = AttentionPolicy(32, 2, True).to(device) -> tiny
+    model = AttentionPolicy(64, 10, True).to(device)
+
     print(sum([p.nelement() for p in model.parameters()]))
     # criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    epochs = 7
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    epochs = 10
     train_losses = []
     test_losses = []
     for epoch in range(epochs):
@@ -271,14 +281,16 @@ if __name__ == "__main__":
         train_losses.append(loss_/len(dataloader))
         test_losses.append(test_loss_/len(test_dataloader))
         if (epoch+1) % 5 == 0:
-            torch.save(model.state_dict(), f"./model/small_{epoch+1}.pth")
-    torch.save(model.state_dict(), f"./model/small_{epoch+1}.pth")
+            torch.save(model.state_dict(), f"./model/tiny_{epoch+1}.pth")
+
+    # torch.save(model.state_dict(), f"./model/tiny_{epoch+1}.pth")
     import matplotlib.pyplot as plt
     plt.plot(range(epochs), train_losses, label="train")
     plt.plot(range(epochs), test_losses, label="test")
-    plt.savefig(f"./model/small_{epochs}.png")
+    plt.savefig(f"./model/medium_{epochs}.png")
     plt.legend()
     plt.show()
+    
     # visualize_action(10)
     # uci = ["d7e8q", "a2b1r", "g7h8b", "h2g1q", "a2a1q"]
     # from state import encode_uci

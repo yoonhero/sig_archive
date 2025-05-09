@@ -30,34 +30,6 @@ SKILL_LEVEL_ELO_MAP: Dict[int, Tuple[int, int]] = {
     20: (3300, 3600),   # Max strength, estimation beyond table
 }
 
-class StockfishOpponent:
-    def __init__(self, stockfish_path: str, skill_level: int = 10):
-        if not 0 <= skill_level <= 20:
-            raise ValueError("Skill level must be between 0 and 20")
-            
-        self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path, timeout=2)
-        self.engine.configure({"Skill Level": skill_level})
-        self.skill_level = skill_level
-        
-    def __del__(self):
-        self.engine.quit()
-        
-    def get_estimated_elo(self) -> Tuple[int, int]:
-        return SKILL_LEVEL_ELO_MAP[self.skill_level]
-        
-    def get_move(self, board: chess.Board) -> chess.Move:
-        result = self.engine.play(board, chess.engine.Limit(time=0.1))
-        return result.move
-        
-    def play_game(self, agent, state: State) -> Optional[str]:
-        while not state.game_over():
-            if state.board.turn == chess.WHITE:
-                _ = agent.respond()
-            else:
-                move = self.get_move(state.board)
-                state.push(move)
-            print(state)
-        return state.game_result()
 
 # Example usage:
 if __name__ == "__main__":
