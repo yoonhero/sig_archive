@@ -9,8 +9,10 @@ import torch
 from eval_example import evaluate_board
 import dtypes
 from state import State, decode_action
-from state import total_tokens
+from state import total_tokens, encode_uci
 from benchmark import StockfishOpponent
+from data import embedding, n_layer, prepare_sequence_data
+from data import AttentionPolicy
 
 app = Flask(__name__)
 
@@ -55,7 +57,8 @@ class Agent():
         values = sorted(values, key=lambda x: x[0], reverse=me) # define the current player's strategy
 
         if cur_depth == 0:
-            # print([(v, decode_action(c)) for (v, c) in values])
+            print([(v, decode_action(c)) for (v, c) in values])
+            # print([decode_action(action) for action in action_by_probs[:5]])
             return values[0][1], aggregation
         return values[0][0], aggregation
 
@@ -104,14 +107,40 @@ class TorchSearchAgent(BasicSearchAgent):
         am_i_white = (cur_turn == chess.WHITE and me) or (cur_turn == chess.BLACK and not me)
         return score if am_i_white else -score
 
+class TorchPolicyAgent(BasicSearchAgent):
+    def __init__(self, model, state: State, max_depth=4, max_leaf=-1):
+        super().__init__(state, max_depth, max_leaf)
+        self.model = model
+        self.model.load_state_dict(torch.load("./model/small_7.pth", weights_only=True)) # terrible value network!
+        self.model.eval()
+    @torch.no_grad()
+    def get_candidates(self) -> dtypes.Actions:
+        legal_actions = self.state.get_legel_actions()
+        prev_action = encode_uci(self.state.board.move_stack[-1].uci()) if self.state.board.move_stack else None
+        x = torch.Tensor(prepare_sequence_data(self.state.serialize("sequence"), prev_action)).unsqueeze(0).to(torch.long)
+        logits = self.model(x)
+        logits = logits[:, -1, :]
+        probs = torch.nn.functional.softmax(logits, dim=1)
+        probs = probs.cpu().numpy()
+        actions = []
+        action_by_probs = probs.argsort(axis=1)[0][::-1].tolist()
+        while True:
+            if len(action_by_probs) == 0:
+                break
+            action = action_by_probs.pop(0)
+            if action in legal_actions:
+                actions.append(action)
+            if len(actions) == self.max_leaf:
+                break
+        return actions
+
 state = State()
-from data import AttentionV
-from data import embedding, n_layer
-model = AttentionV(embedding=embedding, n_layer=n_layer, max_length=73)
+model = AttentionPolicy(embedding=embedding, n_layer=n_layer)
 # agent = BasicSearchAgent(state, max_depth=3)
-agent = TorchSearchAgent(model, state, max_depth=3, max_leaf=-1)
-opponent = StockfishOpponent("/opt/homebrew/bin/stockfish", skill_level=0)
-print(opponent.get_estimated_elo())
+agent = TorchPolicyAgent(model, state, max_depth=6, max_leaf=5)
+# opponent = StockfishOpponent("/opt/homebrew/bin/stockfish", skill_level=0)
+opponent = BasicSearchAgent(state, max_depth=3, max_leaf=-1)
+# print(opponent.get_estimated_elo())
 
 @app.route("/")
 def play_chess():
@@ -137,10 +166,11 @@ def move_chesspiece():
         if state.board.turn == chess.WHITE:
             uci_move = agent.respond()
         else:
-            uci_move = opponent.get_move(state.board)
-            state.attach()
-            state.push(uci_move)
-            state.detach()
+            uci_move = opponent.respond()
+            # uci_move = opponent.get_move(state.board)
+            # state.attach()
+            # state.push(uci_move)
+            # state.detach()
     else:
         uci_move = agent.respond()
 

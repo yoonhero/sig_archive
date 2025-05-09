@@ -59,12 +59,6 @@ class StockfishOpponent:
             print(state)
         return state.game_result()
 
-def get_skill_level_for_elo(target_elo: int) -> int:
-    for skill_level, (min_elo, max_elo) in SKILL_LEVEL_ELO_MAP.items():
-        if min_elo <= target_elo <= max_elo:
-            return skill_level
-    return 20 if target_elo > 4000 else 0
-
 # Example usage:
 if __name__ == "__main__":
     from live_chess import BasicSearchAgent
