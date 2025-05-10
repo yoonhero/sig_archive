@@ -52,6 +52,13 @@ def move_chesspiece():
             uci_move = opponent.respond()
     else:
         uci_move = agent.respond()
+    if benchmark:
+        if state.board.turn == chess.WHITE:
+            uci_move = agent.respond()
+        else:
+            uci_move = opponent.respond()
+    else:
+        uci_move = agent.respond()
 
     response = {}
     if uci_move is not None:

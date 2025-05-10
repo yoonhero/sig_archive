@@ -114,4 +114,4 @@ Go to [here](./week06) for more informations!
 
 ## **Week09: RL in a nutshell**
 
-Dive into Intelli-Search Paradighm
+Dive into Intelli-Search Paradigm
