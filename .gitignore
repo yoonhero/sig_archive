@@ -187,3 +187,4 @@ logs
 tmp
 week06/data
 week06/model
+wandb/

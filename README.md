@@ -106,6 +106,12 @@ About dataset
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-## **Week06: PT time**
+## **Week06~07: PT time**
 
 Strengthen your sight.
+
+Go to [here](./week06) for more informations!
+
+## **Week09: RL in a nutshell**
+
+Dive into Intelli-Search Paradighm
