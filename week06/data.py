@@ -1,3 +1,4 @@
+#! /usr/bin/env python
 import chess
 import chess.pgn
 import io
@@ -8,6 +9,7 @@ import multiprocessing
 import sys
 from PIL import Image
 import matplotlib.pyplot as plt
+import sys
 
 # Increase recursion limit to handle deep recursion during pickling
 sys.setrecursionlimit(10000)
@@ -15,6 +17,8 @@ sys.setrecursionlimit(10000)
 from state import State, visualize_action, decode_action, break_down_uci
 from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK, total_tokens
 import dtypes
+
+from essential import Logger, ONLINE
 
 def prepare_sequence_data(vector, prev_action):
     if prev_action is not None:
@@ -111,7 +115,7 @@ def load_games(path, mode, max_length=None, save_path=None):
         if game is not None:
             games.append(game)
         else: break
-        if len(games) > 20000: break
+        # if len(games) > 20000: break
     pgn.close()
 
     # Use a simpler approach with chunksize to reduce recursion depth
@@ -239,56 +243,62 @@ if __name__ == "__main__":
     save_path = f"./data/processed/database4u_withturn_{mode}.npz"
     vectors, actions, results = load_games(path, mode, max_length=160, save_path=save_path)
     print(vectors.shape, actions.shape, results.shape)
-    # vectors = vectors[:100000]
-    # results = results[:100000]
+    dataset_samples_by_size = {
+        "tiny": 10000,
+        "small": 100000,
+        "medium": 1000000,
+        "large": 5900000,
+    }
+    num_of_samples = dataset_samples_by_size[os.getenv("DS", "small")]
+    dataloader, test_dataloader = make_dataloader(vectors[:num_of_samples], results[:num_of_samples])
+    
     device = "mps"
-    dataloader, test_dataloader = make_dataloader(vectors, results)
+    models = {"tiny": (32, 2, True), "small": (32, 5, True), "medium": (64, 10, True), "large": (128, 12, True)}
+    model_size = os.getenv("MS", "small")
+    model = AttentionPolicy(*models[model_size]).to(device)
+    save_to = "./model/{model_size}".format(model_size=model_size)
+    os.makedirs(save_to, exist_ok=True)
+    print(f"{sum([p.nelement() for p in model.parameters()])} parameters")
 
-    # model = AttentionPolicy(32, 5).to(device) -> small
-    # model = AttentionPolicy(32, 2, True).to(device) -> tiny
-    # model = AttentionPolicy(64, 10, True).to(device) -> medium
-    model = AttentionPolicy(128, 12, True).to(device)
+    run = Logger(ONLINE, run_name=f"{model_size}_{num_of_samples:.0f}k", configs={"model_size": model_size, "num_of_samples": num_of_samples}, only_log=True, project="chess", settings=True)
 
-    print(sum([p.nelement() for p in model.parameters()]))
-    # criterion = torch.nn.MSELoss()
+    # criterion = torch.nn.MSELoss(
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    epochs = 10
+    epochs = 20
     train_losses = []
     test_losses = []
     for epoch in range(epochs):
-        loss_ = 0
+        loss = 0
         acc = 0
         for _vectors, _results in tqdm.tqdm(dataloader):
             optimizer.zero_grad()
             _vectors = _vectors.to(device)
             # _results = _results.to(device)
-            loss = model(_vectors, True)
+            _loss = model(_vectors, True)
             # loss = criterion(output, _results)
-            loss.backward()
+            _loss.backward()
             optimizer.step()
-            loss_ += loss.item()
-        print(f"epoch {epoch+1}, Loss: {loss_/len(dataloader):.4f}")
-        test_loss_ = 0
+            loss += _loss.item()
+        print(f"epoch {epoch+1}, Loss: {(loss:=loss/len(dataloader)):.4f}")
+        test_loss = 0
         with torch.no_grad():
             model.eval()
             for _vectors, _results in tqdm.tqdm(test_dataloader):
                 _vectors = _vectors.to(device)
-                # _results = _results.to(device)
-                loss = model(_vectors, True)
-                # loss = criterion(output, _results)
-                test_loss_ += loss.item()
+                _loss = model(_vectors, True)
+                test_loss += _loss.item()
             model.train()
-        print(f"epoch {epoch+1}, Test Loss: {test_loss_/len(test_dataloader):.4f}")
-        train_losses.append(loss_/len(dataloader))
-        test_losses.append(test_loss_/len(test_dataloader))
+        print(f"epoch {epoch+1}, Test Loss: {(test_loss:=test_loss/len(test_dataloader)):.4f}")
+        train_losses.append(loss)
+        test_losses.append(test_loss)
+        run.log({"train/loss": loss, "test/loss": test_loss}, step=epoch)
         if (epoch+1) % 5 == 0:
-            torch.save(model.state_dict(), f"./model/tiny_{epoch+1}.pth")
-
-    # torch.save(model.state_dict(), f"./model/tiny_{epoch+1}.pth")
-    import matplotlib.pyplot as plt
+            torch.save(model.state_dict(), save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.pth")
+    torch.save(model.state_dict(), save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.pth")
+    plt.title(f"{model_size} {num_of_samples:.0f}k")
     plt.plot(range(epochs), train_losses, label="train")
     plt.plot(range(epochs), test_losses, label="test")
-    plt.savefig(f"./model/medium_{epochs}.png")
+    plt.savefig(save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.png")
     plt.legend()
     plt.show()
     

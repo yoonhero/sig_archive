@@ -77,6 +77,8 @@ class StockfishAgent(Agent):
         return encode_uci(self.engine.play(self.state.board, chess.engine.Limit(time=0.1)).move.uci())
     def get_estimated_elo(self):
         return SKILL_LEVEL_ELO_MAP[self.skill_level]
+    def __del__(self):
+        self.engine.close()
 
 class RandomAgent(Agent):
     def predict(self) -> str:
