@@ -9,7 +9,7 @@ basics = "pnbrqk"
 action_space_size = 4272
 pieces = {piece:i for i, piece in enumerate(basics + basics.upper())}
 itop = {i:piece for piece, i in pieces.items()}
-specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>", "<legal_moves>", "<white_king>", "<white_queen>", "<black_king>", "<black_queen>", "<pad>"]
+specials = ["<me>", "<opponent>", "<board_start>", "<board_end>", "<row_end>", "<empty>", "<legal_moves>", "<white_king>", "<white_queen>", "<black_king>", "<black_queen>", "<pad>", "<white_turn>", "<black_turn>"]
 special_tokens = {special:i+len(pieces.values()) for i, special in enumerate(specials)}
 tokens_without_actions = {k: v+action_space_size for k, v in (pieces | special_tokens).items()}
 
@@ -27,6 +27,9 @@ WHITE_KINGSIDE_CASTLING = "<white_king>"
 WHITE_QUEENSIDE_CASTLING = "<white_queen>"
 BLACK_KINGSIDE_CASTLING = "<black_king>"
 BLACK_QUEENSIDE_CASTLING = "<black_queen>"
+
+BLACK_TURN = "<black_turn>"
+WHITE_TURN = "<white_turn>"
 
 # convert action into UCI format movement
 def decode_action(action: dtypes.Action, verbose=False) -> dtypes.UCI:
@@ -75,7 +78,7 @@ def encode_uci(move: dtypes.UCI) -> dtypes.Action:
 decoded_actions = {decode_action(action): action for action in range(action_space_size)}
 token_to_index: dict[dtypes.Token, int] = tokens_without_actions | decoded_actions
 index_to_token: dict[int, dtypes.Token] = {index:token for token, index in token_to_index.items()}
-total_tokens = len(token_to_index)
+total_tokens = len(token_to_index) - 2
 
 vectorize = lambda token: token_to_index[token]
 tokenize = lambda index: index_to_token[index]
@@ -141,8 +144,9 @@ class State():
     def __repr__(self) -> str:
         return ["".join(["." * int(s) if s.isdigit() else s for s in line]) for line in self.board.board_fen().split("/")  ]
     @staticmethod
-    def from_fen(fen: str):
+    def from_fen(fen: str, turn: chess.Color):
         (board := chess.Board()).set_fen(fen)
+        board.turn = turn
         return State(board)
     def get_castling_rights(self) -> dtypes.Vector:
         return [
@@ -151,13 +155,17 @@ class State():
             vectorize(BLACK_KINGSIDE_CASTLING) if self.board.has_kingside_castling_rights(chess.BLACK) else 0,
             vectorize(BLACK_QUEENSIDE_CASTLING) if self.board.has_queenside_castling_rights(chess.BLACK) else 0
         ]
-    def serialize(self, mode="sequence") -> dtypes.Vector:
+    def serialize(self, mode="sequence", deprecated=False) -> dtypes.Vector:
         assert mode in ["sequence", "cnn"], "Please choose the appropriate mode."
         if mode == "sequence":
             vector_legal_moves = [vectorize(LEGAL_MOVES)] + self.get_legel_actions()
             vector_fen = vectorize_fen(self.board.board_fen())
             vector_castling_rights = [v for v in self.get_castling_rights() if v != 0]
-            return vector_fen + vector_legal_moves + vector_castling_rights
+            turn = [total_tokens+1-self.board.turn]
+            if deprecated:
+                return vector_fen + vector_legal_moves + vector_castling_rights + turn
+            else:
+                return vector_fen + turn + vector_legal_moves + vector_castling_rights
         elif mode == "cnn":
             bstate = np.zeros(64, np.uint16)
             for i in range(64):

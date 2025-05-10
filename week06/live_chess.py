@@ -4,10 +4,11 @@ import random
 from typing import Optional
 from flask import Flask, render_template, request
 import time
+import sys
 
 from eval_example import evaluate_board
 import dtypes
-from state import State, decode_action
+from state import State, decode_action, encode_uci
 
 app = Flask(__name__)
 
@@ -55,6 +56,46 @@ class Agent():
             print([(v, decode_action(c)) for (v, c) in values])
             return values[0][1], aggregation
         return values[0][0], aggregation
+
+# Estimated ELO ranges for Stockfish skill levels
+# These are approximate values based on community testing
+SKILL_LEVEL_ELO_MAP = {
+    0: (1200, 1450),    # Based on master-skill-0: 1320.1
+    1: (1350, 1600),    # Based on master-skill-1: 1467.6
+    2: (1500, 1750),    # Based on master-skill-2: 1608.4
+    3: (1600, 1900),    # Based on master-skill-3: 1742.3
+    4: (1800, 2050),    # Based on master-skill-4: 1922.9
+    5: (2050, 2350),    # Based on master-skill-5: 2203.7
+    6: (2250, 2500),    # Based on master-skill-6: 2363.2
+    7: (2350, 2650),    # Based on master-skill-7: 2499.5
+    8: (2450, 2750),    # Based on master-skill-8: 2596.2
+    9: (2550, 2850),    # Based on master-skill-9: 2702.8
+    10: (2650, 2950),   # Based on master-skill-10: 2788.3
+    11: (2700, 3000),   # Based on master-skill-11: 2855.5
+    12: (2800, 3050),   # Based on master-skill-12: 2923.1
+    13: (2850, 3100),   # Based on master-skill-13: 2972.9
+    14: (2900, 3150),   # Based on master-skill-14: 3024.8
+    15: (2950, 3200),   # Based on master-skill-15: 3069.5
+    16: (3000, 3250),   # Based on master-skill-16: 3111.2
+    17: (3000, 3300),   # Based on master-skill-17: 3141.3
+    18: (3050, 3300),   # Based on master-skill-18: 3170.3
+    19: (3050, 3350),   # Based on master-skill-19: 3191.1
+    20: (3300, 3600),   # Max strength, estimation beyond table
+}
+
+class StockfishAgent(Agent):
+    def __init__(self, state: State, stockfish_path: str, skill_level: int = 0, timeout: float = 0.5):
+        super().__init__(state)
+        self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path, timeout=timeout)
+        self.engine.configure({"Skill Level": skill_level})
+        self.skill_level = skill_level
+        print(f"Stockfish {skill_level}(={self.get_estimated_elo()}) is ready.")
+    def predict(self) -> dtypes.UCI:
+        return encode_uci(self.engine.play(self.state.board, chess.engine.Limit(time=0.1)).move.uci())
+    def get_estimated_elo(self):
+        return SKILL_LEVEL_ELO_MAP[self.skill_level]
+    def __del__(self):
+        self.engine.close()
 
 class RandomAgent(Agent):
     def predict(self) -> str:
@@ -118,6 +159,10 @@ class TorchSearchAgent(BasicSearchAgent):
 state = State()
 # agent = BasicSearchAgent(state, max_depth=3)
 agent = TorchSearchAgent(state, max_depth=3, max_leaf=-1)
+if sys.argv[-1] == "stockfish":
+    opponent = StockfishAgent(state, stockfish_path="**", skill_level=0)
+else:
+    opponent = BasicSearchAgent(state, max_depth=3, max_leaf=-1)
 
 @app.route("/")
 def play_chess():
@@ -132,13 +177,20 @@ def move_chesspiece():
     body = request.get_json()
     self_play = body["self_play"] == "1"
     history = body["history"]
+    benchmark = body["benchmark"]
     if history and not self_play:
         prev_move = history[-1]
         uci = prev_move["from"]+prev_move["to"]
         if "promotion" in prev_move:
             uci += prev_move["promotion"]
         state.push_uci(uci)
-    uci_move = agent.respond()
+    if benchmark:
+        if state.board.turn == chess.WHITE:
+            uci_move = agent.respond()
+        else:
+            uci_move = opponent.respond()
+    else:
+        uci_move = agent.respond()
 
     response = {}
     if uci_move is not None:

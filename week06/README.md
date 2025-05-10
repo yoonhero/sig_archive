@@ -35,7 +35,7 @@ pytorch/tensorflow는 다운로드 방법을 따로 찾아봐요.
 my TODOs:
 
 -   [x] Self play + refactoring
--   [ ] SPRT with stockfish or weeker opponents.
+-   [x] SPRT with stockfish or weeker opponents.
 -   [ ] Minimax search tree visualization(evaluation comparison panel?)
--   [ ] Find a way to play 1/1 live chess contest
+-   [x] Find a way to play 1/1 live chess contest
 -   [ ] Lichess bot wrapper? or just SCSC discord play~.

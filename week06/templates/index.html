@@ -11,6 +11,10 @@
     <body>
         <div class="gameResult"></div>
         <div id="myBoard" style="width: 400px"></div>
+        <form>
+            <input id="benchmark" type="checkbox" name="benchmark" />
+            <label for="benchmark">Enable Benchmark</label>
+        </form>
         <button class="startBtn">start</button>
         <button class="restartBtn">Restart</button>
 
@@ -34,6 +38,13 @@
 
             const startBtn = document.querySelector(".startBtn");
             const restartBtn = document.querySelector(".restartBtn");
+            const benchmarkCheckbox = document.querySelector("#benchmark");
+            let isBenchmarkEnabled = false;
+
+            benchmarkCheckbox.addEventListener("change", (e) => {
+                isBenchmarkEnabled = e.target.checked;
+            });
+
             restartBtn.addEventListener("click", async () => {
                 const response = await fetch("/reset", {
                     method: "PUT",
@@ -65,6 +76,7 @@
                 const body = {
                     history,
                     self_play: "{{self_play}}",
+                    benchmark: isBenchmarkEnabled,
                 };
                 const response = await fetch("/move", {
                     body: JSON.stringify(body),
@@ -111,6 +123,7 @@
 
             if ("{{self_play}}" != "1") {
                 startBtn.remove(); // if we don't need any start btn
+                document.querySelector("#benchmark").parentElement.style.display = "none"; // hide benchmark checkbox and its label
             }
 
             startBtn.addEventListener("click", () => {

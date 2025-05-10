@@ -62,7 +62,7 @@ def parse_game(game, mode="sequence", max_length=140) -> tuple[any, dtypes.Actio
                 action = vectorize(uci)
             except KeyError:
                 raise ValueError("Invalid move")
-            vector = prepare_sequence_data(vector, prev_action) + [action]
+            vector = prepare_sequence_data(vector, prev_action) + [total_tokens + bool(state.board.turn)] + [action]
             vector = np.array(vector)
             vector = pad_sequence_data(vector, max_length)
             prev_action = action
