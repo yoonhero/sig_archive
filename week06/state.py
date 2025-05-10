@@ -144,8 +144,9 @@ class State():
     def __repr__(self) -> str:
         return ["".join(["." * int(s) if s.isdigit() else s for s in line]) for line in self.board.board_fen().split("/")  ]
     @staticmethod
-    def from_fen(fen: str):
+    def from_fen(fen: str, turn: chess.Color):
         (board := chess.Board()).set_fen(fen)
+        board.turn = turn
         return State(board)
     def get_castling_rights(self) -> dtypes.Vector:
         return [
@@ -154,13 +155,17 @@ class State():
             vectorize(BLACK_KINGSIDE_CASTLING) if self.board.has_kingside_castling_rights(chess.BLACK) else 0,
             vectorize(BLACK_QUEENSIDE_CASTLING) if self.board.has_queenside_castling_rights(chess.BLACK) else 0
         ]
-    def serialize(self, mode="sequence") -> dtypes.Vector:
+    def serialize(self, mode="sequence", deprecated=False) -> dtypes.Vector:
         assert mode in ["sequence", "cnn"], "Please choose the appropriate mode."
         if mode == "sequence":
             vector_legal_moves = [vectorize(LEGAL_MOVES)] + self.get_legel_actions()
             vector_fen = vectorize_fen(self.board.board_fen())
             vector_castling_rights = [v for v in self.get_castling_rights() if v != 0]
-            return vector_fen + vector_legal_moves + vector_castling_rights
+            turn = [total_tokens+1-self.board.turn]
+            if deprecated:
+                return vector_fen + vector_legal_moves + vector_castling_rights + turn
+            else:
+                return vector_fen + turn + vector_legal_moves + vector_castling_rights
         elif mode == "cnn":
             bstate = np.zeros(64, np.uint16)
             for i in range(64):

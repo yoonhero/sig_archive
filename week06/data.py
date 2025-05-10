@@ -239,14 +239,15 @@ if __name__ == "__main__":
     save_path = f"./data/processed/database4u_withturn_{mode}.npz"
     vectors, actions, results = load_games(path, mode, max_length=160, save_path=save_path)
     print(vectors.shape, actions.shape, results.shape)
-    vectors = vectors[:100000]
-    results = results[:100000]
+    # vectors = vectors[:100000]
+    # results = results[:100000]
     device = "mps"
     dataloader, test_dataloader = make_dataloader(vectors, results)
 
     # model = AttentionPolicy(32, 5).to(device) -> small
     # model = AttentionPolicy(32, 2, True).to(device) -> tiny
-    model = AttentionPolicy(64, 10, True).to(device)
+    # model = AttentionPolicy(64, 10, True).to(device) -> medium
+    model = AttentionPolicy(128, 12, True).to(device)
 
     print(sum([p.nelement() for p in model.parameters()]))
     # criterion = torch.nn.MSELoss()

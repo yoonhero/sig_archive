@@ -13,8 +13,13 @@ app = Flask(__name__)
     
 state = State()
 # agent = BasicSearchAgent(state, max_depth=3)
-model = AttentionPolicy(embedding=embedding, n_layer=n_layer)
-agent = TorchPolicyAgent(model, state, max_depth=1, max_leaf=4)
+# model = AttentionPolicy(embedding=embedding, n_layer=n_layer)
+model = AttentionPolicy(64, 10, True)
+w = torch.load("./model/medium_10.pth", weights_only=True)
+w = {k: v for k, v in w.items() if "mask" not in k}
+model.load_state_dict(w, strict=False) # terrible value network!
+agent = TorchPolicyAgent(model, state, max_depth=6, max_leaf=6)
+model.eval()
 if sys.argv[-1] == "stockfish":
     opponent = StockfishAgent(state, skill_level=0)
 else:
@@ -61,4 +66,4 @@ def reset():
     return {"ok": 200}
 
 if __name__  == "__main__":
-    app.run(port=8080, debug=True)
+    app.run(port=8080)

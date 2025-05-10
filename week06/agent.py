@@ -109,8 +109,6 @@ class TorchSearchAgent(BasicSearchAgent):
     def __init__(self, model, state: State, max_depth=4, max_leaf=-1):
         super().__init__(state, max_depth, max_leaf)
         self.model = model
-        self.model.load_state_dict(torch.load("./model/small_35.pth", weights_only=True)) # terrible value network!
-        self.model.eval()
     def get_candidates(self) -> dtypes.Actions: # explore 1
         legal_actions = self.state.get_legel_actions()
         return legal_actions
@@ -127,14 +125,10 @@ class TorchPolicyAgent(Agent):
     def __init__(self, model: torch.nn.Module, state: State, **kwargs):
         super().__init__(state)
         self.model = model
-        w = torch.load("./model/small_5.pth", weights_only=True)
-        w = {k: v for k, v in w.items() if "mask" not in k}
-        self.model.load_state_dict(w, strict=False) # terrible value network!
-        self.model.eval()
     def predict(self) -> dtypes.UCI:
         legal_actions = self.state.get_legel_actions()
         prev_action = encode_uci(self.state.board.move_stack[-1].uci()) if self.state.board.move_stack else None
-        x = torch.Tensor(prepare_sequence_data(self.state.serialize("sequence"), prev_action)).unsqueeze(0).to(torch.long)
+        x = torch.Tensor(prepare_sequence_data(self.state.serialize("sequence"), prev_action)+[4296+1-self.state.board.turn]).unsqueeze(0).to(torch.long)
         logits = self.model(x)
         logits = logits[:, -1, :][0]
         logits = logits[legal_actions] / 0.8
@@ -152,10 +146,6 @@ class TorchPolicySearchAgent(BasicSearchAgent):
     def __init__(self, model: torch.nn.Module, state: State, max_depth=4, max_leaf=-1):
         super().__init__(state, max_depth, max_leaf)
         self.model = model
-        w = torch.load("./model/small_7.pth", weights_only=True)
-        w = {k: v for k, v in w.items() if "mask" not in k}
-        self.model.load_state_dict(w, strict=False) # terrible value network!
-        self.model.eval()
     @torch.no_grad()
     def get_candidates(self) -> dtypes.Actions:
         legal_actions = self.state.get_legel_actions()
