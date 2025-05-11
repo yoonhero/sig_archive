@@ -149,23 +149,26 @@ class State():
         board.turn = turn
         return State(board)
     def get_castling_rights(self) -> dtypes.Vector:
-        return [
+        return [v for v in [
             vectorize(WHITE_KINGSIDE_CASTLING) if self.board.has_kingside_castling_rights(chess.WHITE) else 0,
             vectorize(WHITE_QUEENSIDE_CASTLING) if self.board.has_queenside_castling_rights(chess.WHITE) else 0,
             vectorize(BLACK_KINGSIDE_CASTLING) if self.board.has_kingside_castling_rights(chess.BLACK) else 0,
             vectorize(BLACK_QUEENSIDE_CASTLING) if self.board.has_queenside_castling_rights(chess.BLACK) else 0
-        ]
-    def serialize(self, mode="sequence", deprecated=False) -> dtypes.Vector:
+        ] if v != 0]
+    @staticmethod
+    def prepare_sequence_data(vector: dtypes.Vector, prev_action: Optional[dtypes.Action]=None) -> dtypes.Vector:
+        if prev_action is not None:
+            vector += [vectorize(OPPONENT_TOK), prev_action]
+        vector += [vectorize(ME_TOK)]
+        return vector
+    def serialize(self, mode="sequence", prev_action: Optional[dtypes.Action]=None) -> dtypes.Vector:
         assert mode in ["sequence", "cnn"], "Please choose the appropriate mode."
         if mode == "sequence":
             vector_legal_moves = [vectorize(LEGAL_MOVES)] + self.get_legel_actions()
             vector_fen = vectorize_fen(self.board.board_fen())
-            vector_castling_rights = [v for v in self.get_castling_rights() if v != 0]
+            vector_castling_rights = self.get_castling_rights()
             turn = [total_tokens+1-self.board.turn]
-            if deprecated:
-                return vector_fen + vector_legal_moves + vector_castling_rights + turn
-            else:
-                return vector_fen + turn + vector_legal_moves + vector_castling_rights
+            return State.prepare_sequence_data(vector_fen + vector_legal_moves + vector_castling_rights, prev_action=prev_action) + turn
         elif mode == "cnn":
             bstate = np.zeros(64, np.uint16)
             for i in range(64):
@@ -223,6 +226,19 @@ class State():
     def clone(self): return State(self.copy())
     def __str__(self):
         return str(self.board)
+    def render(self, arrows=None):
+        return chess.svg.board(
+            self.board,
+            arrows=arrows,
+            size=350,
+        )
+    @staticmethod
+    def svg_arrows(actions: dtypes.Actions, colors: list[str]):
+        arrows = []
+        for action, color in zip(actions, colors):
+            _, (from_row, from_col, to_row, to_col) = decode_action(action, verbose=True)
+            arrows.append(chess.svg.Arrow(from_row*8+from_col, to_row*8+to_col, color=color)) 
+        return arrows
     def game_over(self) -> bool:
         return self.board.is_game_over()
     def game_result(self) -> str:

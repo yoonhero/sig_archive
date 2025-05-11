@@ -10,21 +10,19 @@ import sys
 from PIL import Image
 import matplotlib.pyplot as plt
 import sys
+from typing import Optional
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 # Increase recursion limit to handle deep recursion during pickling
 sys.setrecursionlimit(10000)
 
+from models import *
 from state import State, visualize_action, decode_action, break_down_uci
-from state import vectorize, OPPONENT_TOK, ME_TOK, PAD_TOK, total_tokens
+from state import vectorize, PAD_TOK
 import dtypes
 
 from essential import Logger, ONLINE
-
-def prepare_sequence_data(vector, prev_action):
-    if prev_action is not None:
-        vector += [vectorize(OPPONENT_TOK), prev_action]
-    vector += [vectorize(ME_TOK)]
-    return vector
 
 def pad_sequence_data(vector, max_length):
     if len(vector) > max_length:
@@ -51,23 +49,27 @@ def parse_game(game, mode="sequence", max_length=140) -> tuple[any, dtypes.Actio
     board = game.board()
     vectors = []
     actions = []
+    attention_masks = []
     state = State(board)
     prev_action = None
     for move in game.mainline_moves():
         try:
-            vector = state.serialize(mode) # sequence -> length / cnn -> 15 channels
+            vector = state.serialize(mode, prev_action) # sequence -> length / cnn -> 15 channels
         except AssertionError: # not a noraml game
             break
         uci = str(move)
         state.push(move)
+        attention_mask = None
         if mode == "sequence": # output next_action
             try:
                 action = vectorize(uci)
             except KeyError:
                 raise ValueError("Invalid move")
-            vector = prepare_sequence_data(vector, prev_action) + [total_tokens + bool(state.board.turn)] + [action]
+            vector += [action]
+            action_index = len(vector) - 1
             vector = np.array(vector)
             vector = pad_sequence_data(vector, max_length)
+            attention_mask = action_index
             prev_action = action
             if action is None:
                 raise ValueError("Invalid move")
@@ -80,10 +82,12 @@ def parse_game(game, mode="sequence", max_length=140) -> tuple[any, dtypes.Actio
                 action[2, promotion-1, :] = 1 # nbrq
         vectors.append(vector)
         actions.append(action)
+        if attention_mask is not None:
+            attention_masks.append(attention_mask)
     else:
         if len(vectors) == 0:
             raise ValueError("No moves")
-        return vectors, actions, [game_result] * len(vectors)
+        return vectors, actions, attention_masks, [game_result] * len(vectors)
     raise ValueError("Not a normal game")
 
 # Define process_single_game outside of any class to avoid pickling issues
@@ -94,14 +98,14 @@ def process_single_game(args):
     except ValueError:
         return None
 
-def load_games(path, mode, max_length=None, save_path=None):
+def load_games(path, mode, max_length=None, save_path=None, force_reload=False):
     processed_games = 0
     invalid_games = 0
-    vectors, actions, results = [], [], []
-    if os.path.exists(save_path):
+    vectors, actions, attention_masks, results = [], [], [], []
+    if os.path.exists(save_path) and not force_reload:
         print(f"--- Loaded cache from {save_path} ---")
         data = np.load(save_path)
-        return data["vectors"], data["actions"], data["results"]
+        return data["vectors"], data["actions"], data["attention_masks"], data["results"]
     
     pgn = open(path)
     games = []
@@ -129,120 +133,56 @@ def load_games(path, mode, max_length=None, save_path=None):
             continue
         vectors.extend(result[0])
         actions.extend(result[1])
-        results.extend(result[2])
+        attention_masks.extend(result[2])
+        results.extend(result[3])
         processed_games += 1
+        if processed_games == 0:
+            print(State.deserialize(result[0][0]))
     
     vectors = np.stack(vectors, axis=0)
     actions = np.stack(actions, axis=0)
+    attention_masks = np.vstack(attention_masks)
     results = np.vstack(results)
     assert vectors.shape[0] == actions.shape[0] == results.shape[0]
     print(f"Loaded {processed_games} games, {invalid_games} invalid games")
     if save_path:
         print(f"--- Saving to {save_path} ---")
-        np.savez(save_path, vectors=vectors, actions=actions, results=results)
-    return vectors, actions, results
+        np.savez(save_path, vectors=vectors, actions=actions, attention_masks=attention_masks, results=results)
+    return vectors, actions, attention_masks, results
 
-board_length = 73 # only evaluates the board.
-n_layer = 5
-embedding = 32
 
-from torch.utils.data import Dataset, DataLoader
 class dataset(Dataset):
-    def __init__(self, vectors, results):
+    def __init__(self, vectors, results, attention_masks):
         self.vectors = vectors
         self.results = results
+        self.attention_masks = attention_masks
     def __len__(self):
         return len(self.vectors)
     def __getitem__(self, idx):
-        return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float)
+        if len(self.attention_masks[idx]) == 0:
+            return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float), None
+        else:
+            return torch.from_numpy(self.vectors[idx]).to(torch.long), torch.from_numpy(self.results[idx]).to(torch.float), torch.from_numpy(self.attention_masks[idx]).to(torch.long)
 
-def make_dataloader(vectors, results):
+def make_dataloader(vectors, results, attention_masks):
     import sklearn.model_selection
-    train_vectors, test_vectors, train_results, test_results = sklearn.model_selection.train_test_split(vectors, results, test_size=0.1, random_state=42)
-    ds = dataset(train_vectors, train_results)
-    test_ds = dataset(test_vectors, test_results)
+    train_vectors, test_vectors, train_results, test_results, train_attention_masks, test_attention_masks = sklearn.model_selection.train_test_split(vectors, results, attention_masks, test_size=0.1, random_state=42)
+    ds = dataset(train_vectors, train_results, train_attention_masks)
+    test_ds = dataset(test_vectors, test_results, test_attention_masks)
     batch_size = 512
     dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
     return dataloader, test_dataloader
 
-import torch.nn
-class AttentionBlock(torch.nn.Module):
-    def __init__(self, demb, nth_layer):
-        super().__init__()
-        self.act = torch.nn.ReLU()
-        self.norm = torch.nn.LayerNorm(demb)
-        self.qkv = torch.nn.Linear(demb, demb*3)
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(demb, demb*3),
-            torch.nn.LayerNorm(demb*3),
-            torch.nn.ReLU(),
-            torch.nn.Linear(demb*3, demb),
-        )
-        mask = torch.tril(torch.ones(200, 200)).view(1, 200, 200)
-        mask[:, :73, :73] = 1 # mask sure they can view all board
-        self.register_buffer("mask", mask.bool())
-        self.nth_layer = nth_layer
-
-    def forward(self, x: torch.Tensor):
-        B, T, C = x.shape
-        x = self.qkv(self.act(self.norm((start:=x))))
-        q, k, v = x.split(C, dim=2)
-        attn = q @ k.transpose(-2, -1) * (1 / np.sqrt(C))
-        attn = attn.masked_fill(~self.mask[:,:T,:T], float("-inf"))
-        attn = torch.softmax(attn, dim=-1)
-        # plt.imshow(attn[0].detach().cpu().view(140, 140).numpy())
-        # plt.savefig(f"./model/mask_{self.nth_layer}.png")
-        out = attn @ v
-        x = self.mlp(out)
-        return x + start
-
-class AttentionV(torch.nn.Module):
-    def __init__(self, embedding, n_layer, max_length):
-        super().__init__()
-        self.embedding = torch.nn.Embedding(total_tokens, embedding)
-        self.blocks = torch.nn.ModuleList([AttentionBlock(embedding, i) for i in range(n_layer)])
-        self.norm = torch.nn.LayerNorm(max_length*embedding)
-        self.linear = torch.nn.Linear(max_length*embedding, 1)
-        self.act = torch.nn.Tanh()
-    def forward(self, x):
-        B = x.size(0)
-        x = self.embedding(x)
-        for block in self.blocks:
-            x = block(x)
-        x = x.reshape(B, -1)
-        x = self.act(self.norm(x))
-        x = self.act(self.linear(x))
-        return x
-
-class AttentionPolicy(torch.nn.Module):
-    def __init__(self, embedding, n_layer, with_turn=False):
-        super().__init__()
-        if with_turn:
-            tokens = total_tokens + 2
-        else: tokens = total_tokens
-        self.emb = torch.nn.Embedding(tokens, embedding)
-        self.blocks = torch.nn.ModuleList([AttentionBlock(embedding, i) for i in range(n_layer)])
-        self.norm = torch.nn.LayerNorm(embedding)
-        self.linear = torch.nn.Linear(embedding, tokens)
-        self.act = torch.nn.ReLU()
-    def forward(self, x, train=False):
-        x = self.emb((start:=x))
-        for block in self.blocks:
-            x = block(x)
-        x = self.act(self.norm(x))
-        logits = self.linear(x)
-        if train:
-            return torch.nn.functional.cross_entropy(logits[:, board_length:-1].contiguous().view(-1, total_tokens+2), start[:, board_length+1:].contiguous().view(-1), ignore_index=vectorize(PAD_TOK), reduction="mean")
-        return logits
+models = {"tiny": (32, 2), "small": (32, 5), "medium": (64, 10), "large": (128, 12)}
 
 if __name__ == "__main__":
     username = "yoonhero"
     path = "./data/DATABASE4U.pgn"
     mode = "sequence" # or cnn
     save_path = f"./data/processed/database4u_withturn_{mode}.npz"
-    vectors, actions, results = load_games(path, mode, max_length=160, save_path=save_path)
-    print(vectors.shape, actions.shape, results.shape)
+    vectors, actions, attention_masks, results = load_games(path, mode, max_length=160, save_path=save_path)
+    print(vectors.shape, actions.shape, attention_masks.shape, results.shape)
     dataset_samples_by_size = {
         "tiny": 10000,
         "small": 100000,
@@ -250,10 +190,10 @@ if __name__ == "__main__":
         "large": 5900000,
     }
     num_of_samples = dataset_samples_by_size[os.getenv("DS", "small")]
-    dataloader, test_dataloader = make_dataloader(vectors[:num_of_samples], results[:num_of_samples])
+    dataloader, test_dataloader = make_dataloader(vectors[:num_of_samples], results[:num_of_samples], attention_masks[:num_of_samples])
     
     device = "mps"
-    models = {"tiny": (32, 2, True), "small": (32, 5, True), "medium": (64, 10, True), "large": (128, 12, True)}
+   
     model_size = os.getenv("MS", "small")
     model = AttentionPolicy(*models[model_size]).to(device)
     save_to = "./model/{model_size}".format(model_size=model_size)
@@ -270,11 +210,11 @@ if __name__ == "__main__":
     for epoch in range(epochs):
         loss = 0
         acc = 0
-        for _vectors, _results in tqdm.tqdm(dataloader):
+        for _vectors, _results, _attention_masks in tqdm.tqdm(dataloader):
             optimizer.zero_grad()
             _vectors = _vectors.to(device)
             # _results = _results.to(device)
-            _loss = model(_vectors, True)
+            _loss = model(_vectors, True, _attention_masks)
             # loss = criterion(output, _results)
             _loss.backward()
             optimizer.step()
@@ -283,9 +223,9 @@ if __name__ == "__main__":
         test_loss = 0
         with torch.no_grad():
             model.eval()
-            for _vectors, _results in tqdm.tqdm(test_dataloader):
+            for _vectors, _results, _attention_masks in tqdm.tqdm(test_dataloader):
                 _vectors = _vectors.to(device)
-                _loss = model(_vectors, True)
+                _loss = model(_vectors, True, _attention_masks)
                 test_loss += _loss.item()
             model.train()
         print(f"epoch {epoch+1}, Test Loss: {(test_loss:=test_loss/len(test_dataloader)):.4f}")
@@ -295,7 +235,7 @@ if __name__ == "__main__":
         if (epoch+1) % 5 == 0:
             torch.save(model.state_dict(), save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.pth")
     torch.save(model.state_dict(), save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.pth")
-    plt.title(f"{model_size} {num_of_samples:.0f}k")
+    plt.title(f"{model_size} {num_of_samples/1000:.0f}k")
     plt.plot(range(epochs), train_losses, label="train")
     plt.plot(range(epochs), test_losses, label="test")
     plt.savefig(save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.png")

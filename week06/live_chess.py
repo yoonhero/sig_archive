@@ -5,7 +5,7 @@ import sys
 import matplotlib.pyplot as plt
 
 from state import State
-from data import embedding, n_layer
+from data import embedding, n_layer, models
 from data import AttentionPolicy
 from agent import *
 
@@ -14,8 +14,9 @@ app = Flask(__name__)
 state = State()
 # agent = BasicSearchAgent(state, max_depth=3)
 # model = AttentionPolicy(embedding=embedding, n_layer=n_layer)
-model = AttentionPolicy(64, 10, True)
-w = torch.load("./model/medium_10.pth", weights_only=True)
+
+model = AttentionPolicy(*models["medium"])
+w = torch.load("./model/medium/100k_20.pth", weights_only=True)
 w = {k: v for k, v in w.items() if "mask" not in k}
 model.load_state_dict(w, strict=False) # terrible value network!
 agent = TorchPolicyAgent(model, state, max_depth=6, max_leaf=6)
@@ -45,13 +46,6 @@ def move_chesspiece():
         if "promotion" in prev_move:
             uci += prev_move["promotion"]
         state.push_uci(uci)
-    if benchmark:
-        if state.board.turn == chess.WHITE:
-            uci_move = agent.respond()
-        else:
-            uci_move = opponent.respond()
-    else:
-        uci_move = agent.respond()
     if benchmark:
         if state.board.turn == chess.WHITE:
             uci_move = agent.respond()

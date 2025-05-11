@@ -10,8 +10,6 @@ import dtypes
 from state import State, decode_action
 from state import encode_uci
 from benchmark import SKILL_LEVEL_ELO_MAP
-from data import prepare_sequence_data
-
 class Agent():
     def __init__(self, state: State):
         self.state = state
@@ -130,18 +128,21 @@ class TorchPolicyAgent(Agent):
     def predict(self) -> dtypes.UCI:
         legal_actions = self.state.get_legel_actions()
         prev_action = encode_uci(self.state.board.move_stack[-1].uci()) if self.state.board.move_stack else None
-        x = torch.Tensor(prepare_sequence_data(self.state.serialize("sequence"), prev_action)+[4296+1-self.state.board.turn]).unsqueeze(0).to(torch.long)
+        x = torch.Tensor(self.state.serialize("sequence", prev_action=prev_action)).unsqueeze(0).to(torch.long)
         logits = self.model(x)
         logits = logits[:, -1, :][0]
-        logits = logits[legal_actions] / 0.8
-        probs = torch.nn.functional.softmax(logits, dim=0)
+        conf = logits.softmax(dim=0)[legal_actions].sum()
+        logits = logits[legal_actions]
+        topk_logits, topk_indices = torch.topk(logits, 5, dim=0)
+        probs = torch.nn.functional.softmax(topk_logits, dim=0)
         # fig, ax = plt.subplots(figsize=(10, 10))
         # ax.bar([decode_action(a) for a in legal_actions], probs.tolist())
         # fig.savefig("action_by_probs.png")
         H = (-probs.log() * probs).sum()
         print(H)
-        index = torch.multinomial(probs, 1)
+        index = topk_indices[torch.multinomial(probs, 1)].item()
         print(sorted({decode_action(a): p for a, p in zip(legal_actions, probs.tolist())}.items(), key=lambda x: x[1], reverse=True))
+        print(legal_actions[index])
         return legal_actions[index]
 
 class TorchPolicySearchAgent(BasicSearchAgent):
@@ -152,7 +153,7 @@ class TorchPolicySearchAgent(BasicSearchAgent):
     def get_candidates(self) -> dtypes.Actions:
         legal_actions = self.state.get_legel_actions()
         prev_action = encode_uci(self.state.board.move_stack[-1].uci()) if self.state.board.move_stack else None
-        x = torch.Tensor(prepare_sequence_data(self.state.serialize("sequence"), prev_action)).unsqueeze(0).to(torch.long)
+        x = torch.Tensor(self.state.serialize("sequence", prev_action=prev_action)).unsqueeze(0).to(torch.long)
         logits = self.model(x)
         logits = logits[:, -1, :]
         probs = torch.nn.functional.softmax(logits, dim=1)
