@@ -125,6 +125,10 @@ class TorchPolicyAgent(Agent):
     def __init__(self, model: torch.nn.Module, state: State, **kwargs):
         super().__init__(state)
         self.model = model
+        if "temperature" in kwargs:
+            self.temperature = kwargs["temperature"]
+        else:
+            self.temperature = 1.0
     def predict(self) -> dtypes.UCI:
         legal_actions = self.state.get_legel_actions()
         prev_action = encode_uci(self.state.board.move_stack[-1].uci()) if self.state.board.move_stack else None
@@ -133,14 +137,17 @@ class TorchPolicyAgent(Agent):
         logits = logits[:, -1, :][0]
         conf = logits.softmax(dim=0)[legal_actions].sum()
         logits = logits[legal_actions]
-        topk_logits, topk_indices = torch.topk(logits, 5, dim=0)
-        probs = torch.nn.functional.softmax(topk_logits, dim=0)
+        if len(logits) > 5:
+            topk_logits, topk_indices = torch.topk(logits, 5, dim=0)
+            probs = torch.nn.functional.softmax(topk_logits/self.temperature, dim=0)
+            index = topk_indices[torch.multinomial(probs, 1)].item()
+        else:
+            index = torch.multinomial((probs:=(logits/self.temperature).softmax(0)), 1).item()
         # fig, ax = plt.subplots(figsize=(10, 10))
         # ax.bar([decode_action(a) for a in legal_actions], probs.tolist())
         # fig.savefig("action_by_probs.png")
         H = (-probs.log() * probs).sum()
         print(H)
-        index = topk_indices[torch.multinomial(probs, 1)].item()
         print(sorted({decode_action(a): p for a, p in zip(legal_actions, probs.tolist())}.items(), key=lambda x: x[1], reverse=True))
         print(legal_actions[index])
         return legal_actions[index]

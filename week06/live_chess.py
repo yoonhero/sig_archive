@@ -5,7 +5,7 @@ import sys
 import matplotlib.pyplot as plt
 
 from state import State
-from data import embedding, n_layer, models
+from data import models
 from data import AttentionPolicy
 from agent import *
 
@@ -19,7 +19,7 @@ model = AttentionPolicy(*models["medium"])
 w = torch.load("./model/medium/100k_20.pth", weights_only=True)
 w = {k: v for k, v in w.items() if "mask" not in k}
 model.load_state_dict(w, strict=False) # terrible value network!
-agent = TorchPolicyAgent(model, state, max_depth=6, max_leaf=6)
+agent = TorchPolicyAgent(model, state, max_depth=6, max_leaf=6, temperature=0.5)
 model.eval()
 if sys.argv[-1] == "stockfish":
     opponent = StockfishAgent(state, skill_level=0)

@@ -150,7 +150,6 @@ def load_games(path, mode, max_length=None, save_path=None, force_reload=False):
         np.savez(save_path, vectors=vectors, actions=actions, attention_masks=attention_masks, results=results)
     return vectors, actions, attention_masks, results
 
-
 class dataset(Dataset):
     def __init__(self, vectors, results, attention_masks):
         self.vectors = vectors
@@ -174,6 +173,12 @@ def make_dataloader(vectors, results, attention_masks):
     test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
     return dataloader, test_dataloader
 
+# Policy Network Capcity by model size.
+# 5/12/2025
+# MODEL SIZE     Size           Min perplexity(1M boards)
+# small          327914=0.3M    ~4=54??
+# medium         932810=0.9M    ~2.9=18.17??(terrible!)
+# large          2897354=2.9M   
 models = {"tiny": (32, 2), "small": (32, 5), "medium": (64, 10), "large": (128, 12)}
 
 if __name__ == "__main__":
@@ -199,8 +204,9 @@ if __name__ == "__main__":
     save_to = "./model/{model_size}".format(model_size=model_size)
     os.makedirs(save_to, exist_ok=True)
     print(f"{sum([p.nelement() for p in model.parameters()])} parameters")
+    exit()
 
-    run = Logger(ONLINE, run_name=f"{model_size}_{num_of_samples:.0f}k", configs={"model_size": model_size, "num_of_samples": num_of_samples}, only_log=True, project="chess", settings=True)
+    run = Logger(ONLINE, run_name=f"{model_size}_{(k:=num_of_samples/1000):.0f}k", configs={"model_size": model_size, "num_of_samples": num_of_samples}, only_log=True, project="chess", settings=True)
 
     # criterion = torch.nn.MSELoss(
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
@@ -233,12 +239,12 @@ if __name__ == "__main__":
         test_losses.append(test_loss)
         run.log({"train/loss": loss, "test/loss": test_loss}, step=epoch)
         if (epoch+1) % 5 == 0:
-            torch.save(model.state_dict(), save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.pth")
-    torch.save(model.state_dict(), save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.pth")
-    plt.title(f"{model_size} {num_of_samples/1000:.0f}k")
+            torch.save(model.state_dict(), save_to+f"/{k:.0f}k_{epoch+1}.pth")
+    torch.save(model.state_dict(), save_to+f"/{k:.0f}k_{epoch+1}.pth")
+    plt.title(f"{model_size} {k:.0f}k")
     plt.plot(range(epochs), train_losses, label="train")
     plt.plot(range(epochs), test_losses, label="test")
-    plt.savefig(save_to+f"/{num_of_samples/1000:.0f}k_{epoch+1}.png")
+    plt.savefig(save_to+f"/{k:.0f}k_{epoch+1}.png")
     plt.legend()
     plt.show()
     
