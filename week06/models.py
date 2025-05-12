@@ -12,8 +12,8 @@ class AttentionBlock(torch.nn.Module):
         self.norm = torch.nn.LayerNorm(demb)
         self.qkv = torch.nn.Linear(demb, demb*3)
         self.mlp = torch.nn.Sequential(
+            torch.nn.LayerNorm(demb),
             torch.nn.Linear(demb, demb*3),
-            torch.nn.LayerNorm(demb*3),
             torch.nn.ReLU(),
             torch.nn.Linear(demb*3, demb),
         )
@@ -21,6 +21,7 @@ class AttentionBlock(torch.nn.Module):
         mask[:, :73, :73] = 1 # mask sure they can view all board
         self.register_buffer("mask", mask.bool())
         self.nth_layer = nth_layer
+        self.dropout = torch.nn.Dropout(0.25)
 
     def forward(self, x: torch.Tensor):
         B, T, C = x.shape
@@ -30,7 +31,43 @@ class AttentionBlock(torch.nn.Module):
         attn = attn.masked_fill(~self.mask[:,:T,:T], float("-inf"))
         attn = torch.softmax(attn, dim=-1)
         out = attn @ v
-        x = self.mlp(out)
+        x = self.mlp(self.dropout(out))
+        return x + start
+    
+class MQAttentionBlock(torch.nn.Module):
+    def __init__(self, demb, nth_layer, chunk_dim, q_size, kv_size):
+        super().__init__()
+        self.act = torch.nn.ReLU()
+        self.norm = torch.nn.LayerNorm(demb)
+        assert kv_size % 2 == 0 and kv_size//2 % q_size == 0
+        self.chunk_dim, self.q_size, self.kv_size = chunk_dim, q_size, kv_size
+        self.q_repeat = kv_size//2//q_size
+        self.qkv = torch.nn.Linear(demb, chunk_dim * (q_size+kv_size))
+        self.mlp = torch.nn.Sequential(
+            torch.nn.LayerNorm(demb),
+            torch.nn.Linear(chunk_dim, demb*3),
+            torch.nn.ReLU(),
+            torch.nn.Linear(demb*3, demb),
+        )
+        mask = torch.tril(torch.ones(200, 200)).view(1, 1, 200, 200)
+        mask[:, :, :73, :73] = 1 # mask sure they can view all board -> 73...
+        self.register_buffer("mask", mask.bool())
+        self.nth_layer = nth_layer
+        self.dropout = torch.nn.Dropout(0.25)
+
+    def forward(self, x: torch.Tensor):
+        B, T, C = x.shape
+        x = self.qkv(self.act(self.norm((start:=x))))
+        # q, k, v = x.split(self.q_dim+self.kv_dim, dim=2)
+        x = x.view(B, T, self.chunk_dim, self.q_size+self.kv_size).permute(0, 3, 1, 2) # B heads T C
+        q = x[:, :self.q_size].repeat(1, self.q_repeat, 1, 1)
+        k, v = x[:, self.q_size:].chunk(self.kv_size//2, dim=1)
+        attn = q @ k.transpose(-2, -1) * (1 / math.sqrt(C)) # B k T T
+        attn = attn.masked_fill(~self.mask[:,:,:T,:T], float("-inf"))
+        attn = torch.softmax(attn, dim=-1)
+        out = attn @ v
+        out = out.permute(0, 2, 1, 3).view(B, T, self.chunk_dim)
+        x = self.mlp(self.dropout(out))
         return x + start
 
 class AttentionV(torch.nn.Module):
@@ -52,13 +89,16 @@ class AttentionV(torch.nn.Module):
         return x
 
 class AttentionPolicy(torch.nn.Module):
-    def __init__(self, embedding, n_layer):
+    def __init__(self, demb, n_layer, mqa=False, **kwargs):
         super().__init__()
         self.total_tokens = total_tokens + 2
-        self.emb = torch.nn.Embedding(self.total_tokens, embedding)
-        self.blocks = torch.nn.ModuleList([AttentionBlock(embedding, i) for i in range(n_layer)])
-        self.norm = torch.nn.LayerNorm(embedding)
-        self.linear = torch.nn.Linear(embedding, self.total_tokens)
+        self.emb = torch.nn.Embedding(self.total_tokens, demb)
+        if mqa:
+            self.blocks = torch.nn.ModuleList([MQAttentionBlock(demb, i, kwargs["chunk_dim"], kwargs["q_size"], kwargs["kv_size"]) for i in range(n_layer)])
+        else:
+            self.blocks = torch.nn.ModuleList([AttentionBlock(demb, i) for i in range(n_layer)])
+        self.norm = torch.nn.LayerNorm(demb)
+        self.linear = torch.nn.Linear(demb, self.total_tokens)
         self.act = torch.nn.ReLU()
     def forward(self, x, train=False, attention_masks=None):
         x = self.emb((start:=x))
@@ -73,7 +113,7 @@ class AttentionPolicy(torch.nn.Module):
                 B = attention_masks.shape[0]
                 attention_masks = attention_masks.view(-1)
                 logits = logits[range(B), attention_masks-1].contiguous().view(-1, self.total_tokens)
-                start = start[range(B), attention_masks].contiguous().view(-1)
+                start = start.detach()[range(B), attention_masks].contiguous().view(-1)
                 return torch.nn.functional.cross_entropy(logits, start, ignore_index=vectorize(PAD_TOK), reduction="mean")
         return logits
 
@@ -82,9 +122,9 @@ if __name__ == "__main__":
     from data import models
     model = AttentionPolicy(*models["small"])
     # w = torch.load("./model/medium/100k_20.pth", weights_only=True)
-    w = torch.load("./model/small/100k_20.pth", weights_only=True)
-    w = {k: v for k, v in w.items() if "mask" not in k}
-    model.load_state_dict(w, strict=False) # terrible value network!
+    # w = torch.load("./model/small/100k_20.pth", weights_only=True)
+    # w = {k: v for k, v in w.items() if "mask" not in k}
+    # model.load_state_dict(w, strict=False) # terrible value network!
     username = "yoonhero"
     path = "./data/DATABASE4U.pgn"
     mode = "sequence" # or cnn

@@ -179,7 +179,8 @@ def make_dataloader(vectors, results, attention_masks):
 # small          327914=0.3M    ~4=54??
 # medium         932810=0.9M    ~2.9=18.17??(terrible!)
 # large          2897354=2.9M   
-models = {"tiny": (32, 2), "small": (32, 5), "medium": (64, 10), "large": (128, 12)}
+models = {"tiny": (32, 2), "small": (128, 2), "medium": (128, 5), "large": (128, 12)}
+models_mqa = {"small": {"chunk_dim": 128//8, "q_size": 2, "kv_size": 16}, "medium": {"chunk_dim": 128//16, "q_size": 4, "kv_size": 16}}
 
 if __name__ == "__main__":
     username = "yoonhero"
@@ -199,18 +200,22 @@ if __name__ == "__main__":
     
     device = "mps"
    
+    mqa = bool(int(os.getenv("MQA", '0')))
     model_size = os.getenv("MS", "small")
-    model = AttentionPolicy(*models[model_size]).to(device)
-    save_to = "./model/{model_size}".format(model_size=model_size)
+    if mqa:
+        model = AttentionPolicy(*models[model_size], **models_mqa[model_size]).to(device)
+        save_to = "./model/mqa_{model_size}".format(model_size=model_size)
+    else:
+        model = AttentionPolicy(*models[model_size]).to(device)
+        save_to = "./model/{model_size}".format(model_size=model_size)
     os.makedirs(save_to, exist_ok=True)
     print(f"{sum([p.nelement() for p in model.parameters()])} parameters")
-    exit()
 
-    run = Logger(ONLINE, run_name=f"{model_size}_{(k:=num_of_samples/1000):.0f}k", configs={"model_size": model_size, "num_of_samples": num_of_samples}, only_log=True, project="chess", settings=True)
+    run = Logger(ONLINE, run_name=f"{model_size}_{'mqa' if mqa else 'att'}_{(k:=num_of_samples/1000):.0f}k", configs={"model_size": model_size, "num_of_samples": num_of_samples, "mqa": mqa}, only_log=True, project="chess", settings=True)
 
     # criterion = torch.nn.MSELoss(
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    epochs = 20
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+    epochs = 40
     train_losses = []
     test_losses = []
     for epoch in range(epochs):
