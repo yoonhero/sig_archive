@@ -112,6 +112,19 @@ Strengthen your sight.
 
 Go to [here](./week06) for more informations!
 
-## **Week09: RL in a nutshell**
+## **Summer Week01: Convolution**
 
-Dive into Intelli-Search Paradigm
+1. Convolution 연산에 대한 이야기: X+Y, CLT,
+2. 사람의 정보 처리 시스템에 대한 이야기: The Unbearable Slowness of Being: Why do we live at 10 bits/s?
+3. CNN Design에 대한 이야기: Stride instead of Pooling, Dilation for Dense Classification
+
+### further reading:
+
+#### Related Resources
+
+-   [Understanding Convolutions](https://colah.github.io/posts/2014-07-Understanding-Convolutions/)
+-   [The Unbearable Slowness of Being: Why do we live at 10 bits/s?](https://arxiv.org/pdf/2408.10234)
+-   [Identity Mapping](https://arxiv.org/pdf/1603.05027)
+-   [Alexnet](https://karpathy.github.io/2022/03/14/lecun1989/)
+-   [Early deeplearning without CUDA](https://www.perplexity.ai/search/please-let-me-know-the-case-in-0yL55SLBSjyEmFddC1kAkw#3)
+-   [BD(before deeplearning era)](https://www.youtube.com/watch?v=NfnWJUyUJYU&list=PLkt2uSq6rBVctENoVBg1TpCC7OQi31AlC)
