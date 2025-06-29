@@ -122,6 +122,7 @@ Go to [here](./week06) for more informations!
 
 #### Related Resources
 
+-   [But What is a convolution](https://www.youtube.com/watch?v=KuXjwB4LzSA)
 -   [Understanding Convolutions](https://colah.github.io/posts/2014-07-Understanding-Convolutions/)
 -   [The Unbearable Slowness of Being: Why do we live at 10 bits/s?](https://arxiv.org/pdf/2408.10234)
 -   [Identity Mapping](https://arxiv.org/pdf/1603.05027)
