@@ -120,12 +120,23 @@ Go to [here](./week06) for more informations!
 
 ### further reading:
 
-#### Related Resources
-
 -   [But What is a convolution](https://www.youtube.com/watch?v=KuXjwB4LzSA)
 -   [Understanding Convolutions](https://colah.github.io/posts/2014-07-Understanding-Convolutions/)
 -   [The Unbearable Slowness of Being: Why do we live at 10 bits/s?](https://arxiv.org/pdf/2408.10234)
 -   [Identity Mapping](https://arxiv.org/pdf/1603.05027)
 -   [Alexnet](https://karpathy.github.io/2022/03/14/lecun1989/)
 -   [Early deeplearning without CUDA](https://www.perplexity.ai/search/please-let-me-know-the-case-in-0yL55SLBSjyEmFddC1kAkw#3)
--   [BD(before deeplearning era)](https://www.youtube.com/watch?v=NfnWJUyUJYU&list=PLkt2uSq6rBVctENoVBg1TpCC7OQi31AlC)
+-   [BDE(before deeplearning era)](https://www.youtube.com/watch?v=NfnWJUyUJYU&list=PLkt2uSq6rBVctENoVBg1TpCC7OQi31AlC)
+
+## **Summer Week02**
+
+1. Story about RNN
+2. RNN Regularization: How to bring dropout into RNN without instability.
+3. Neural Turing Machine: Linguistic&Cognitive Science, Theory Of Computation, Focusing on Content&Location, Hard or Soft attention.
+
+### further reading:
+
+- [Experiments on NTM](https://arxiv.org/pdf/1410.540)
+- [TOC in a nutshell](https://www.geeksforgeeks.org/theory-of-computation/introduction-of-theory-of-computation/)
+- [알고리즘과 튜링기계](http://www.aistudy.com/ai/algo_turing.htm)
+- [Neural Geometry](https://www.youtube.com/watch?v=QHj9uVmwA_0)
