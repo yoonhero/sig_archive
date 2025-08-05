@@ -140,3 +140,14 @@ Go to [here](./week06) for more informations!
 - [TOC in a nutshell](https://www.geeksforgeeks.org/theory-of-computation/introduction-of-theory-of-computation/)
 - [알고리즘과 튜링기계](http://www.aistudy.com/ai/algo_turing.htm)
 - [Neural Geometry](https://www.youtube.com/watch?v=QHj9uVmwA_0)
+
+## **Summer Week03**
+
+1. Deep speech 2: Audio Data, CTC Loss, engineering stuff
+2. RNN Regularization: How to plug Dropout on LSTM?
+
+## **Summer Week04**
+
+1. Pointer Network: How to solve discrete-combinational problem? -> pointing the input
+2. Set2Set: **Orders Matteres** -> prove there is easy to learn order.
+3. Relational Network: The essence of intelligence is **connecting the dots**.(Steve Jobs?)
