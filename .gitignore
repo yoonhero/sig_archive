@@ -175,9 +175,9 @@ cython_debug/
 
 *.mp4
 
-hw1/frontend
-hw1/MNIST
-hw1/score-board-zenith-view
+ICL_RL_수능정복하기_25_1/hw1/MNIST/*
+ICL_RL_수능정복하기_25_1/hw1/frontend
+ICL_RL_수능정복하기_25_1/hw1/score-board-zenith-view
 sol.txt
 positional_emb.ipynb
 
@@ -185,7 +185,8 @@ sol.json
 
 logs
 tmp
-week06/data
-week06/model
+ICL_RL_수능정복하기_25_1/week06/data/*
+ICL_RL_수능정복하기_25_1/week06/model/*
 
 wandb/
+
