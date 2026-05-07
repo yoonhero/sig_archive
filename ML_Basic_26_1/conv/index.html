@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>데이터의 모양 - 3x3 Kernel Playground</title>
+  <style>
+    :root {
+      --ink: #000;
+      --paper: #fff;
+      --blue: #dff4ff;
+      --orange: #ffb000;
+      --red: #ff2a12;
+      --green: #16b600;
+      --cyan: #027dc8;
+      --muted: #666;
+      --cell: 34px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .slide {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 1fr 72px;
+      background: var(--paper);
+    }
+
+    .stage {
+      padding: 42px 56px 30px;
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) 520px;
+      gap: 42px;
+      align-items: start;
+    }
+
+    h1 {
+      margin: 0 0 24px;
+      font-size: clamp(48px, 5.4vw, 88px);
+      line-height: 0.92;
+      letter-spacing: 0;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      margin: 0 0 32px;
+      font-size: 36px;
+      line-height: 1.2;
+      font-weight: 800;
+    }
+
+    .prompt {
+      margin: 28px 0 18px;
+      font-size: 32px;
+      line-height: 1.35;
+      font-weight: 750;
+    }
+
+    .prompt span:nth-child(1) {
+      color: var(--red);
+    }
+
+    .prompt span:nth-child(2) {
+      color: #ff8500;
+    }
+
+    .prompt span:nth-child(3) {
+      color: var(--orange);
+    }
+
+    .prompt span:nth-child(4) {
+      color: var(--green);
+    }
+
+    .prompt span:nth-child(5) {
+      color: var(--cyan);
+    }
+
+    .tool-button {
+      min-height: 44px;
+      border: 4px solid var(--ink);
+      color: var(--ink);
+      background: var(--paper);
+      padding: 6px 16px;
+      font-size: 22px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .tool-button.hot {
+      color: var(--paper);
+      background: var(--ink);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: auto 80px auto;
+      gap: 24px;
+      align-items: center;
+      margin-top: 18px;
+    }
+
+    .grid-block {
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+    }
+
+    .label {
+      font-size: 25px;
+      font-weight: 800;
+    }
+
+    .pixel-grid,
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(7, var(--cell));
+      grid-template-rows: repeat(7, var(--cell));
+      gap: 4px;
+      padding: 6px;
+      border: 6px solid var(--ink);
+      background: var(--paper);
+    }
+
+    .pixel,
+    .result {
+      width: var(--cell);
+      height: var(--cell);
+      border: 3px solid var(--ink);
+      background: var(--paper);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .pixel::after,
+    .result::after {
+      content: attr(data-value);
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--paper);
+      font-size: 12px;
+      font-weight: 900;
+      mix-blend-mode: difference;
+    }
+
+    .result {
+      cursor: default;
+    }
+
+    .arrow {
+      width: 74px;
+      height: 48px;
+      position: relative;
+    }
+
+    .arrow::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 17px;
+      width: 48px;
+      height: 14px;
+      background: var(--ink);
+    }
+
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 6px;
+      border-top: 24px solid transparent;
+      border-bottom: 24px solid transparent;
+      border-left: 36px solid var(--ink);
+    }
+
+    .todo {
+      background: var(--blue);
+      border-radius: 86px;
+      padding: 0 40px 38px;
+      min-height: 650px;
+      align-self: stretch;
+    }
+
+    .todo-title {
+      display: table;
+      margin: 0 auto 28px;
+      padding: 8px 14px 10px;
+      color: var(--paper);
+      background: var(--ink);
+      font-size: 52px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .kernel-panel {
+      display: grid;
+      gap: 20px;
+    }
+
+    .kernel-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .kernel-grid input {
+      width: 100%;
+      height: 62px;
+      border: 5px solid var(--ink);
+      text-align: center;
+      font-size: 30px;
+      font-weight: 900;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    .formula {
+      margin-top: 10px;
+      padding: 20px 24px;
+      color: var(--paper);
+      background: var(--ink);
+      font-size: 27px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .examples {
+      margin: 24px 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 25px;
+      line-height: 1.55;
+      font-weight: 800;
+    }
+
+    .examples li::before {
+      content: attr(data-n) ". ";
+      display: inline-block;
+      min-width: 48px;
+    }
+
+    .hl {
+      background: var(--orange);
+      padding: 0 8px 2px;
+      color: var(--ink);
+    }
+
+    footer {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 72px;
+      color: var(--paper);
+      background: var(--ink);
+      font-size: 28px;
+      font-weight: 650;
+    }
+
+    @media (max-width: 1120px) {
+      :root {
+        --cell: 30px;
+      }
+
+      .stage {
+        padding: 36px 28px 36px;
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+
+      h1 {
+        font-size: 56px;
+      }
+
+      .subtitle,
+      .prompt {
+        font-size: 30px;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        justify-items: center;
+      }
+
+      .arrow {
+        transform: rotate(90deg);
+      }
+
+      .todo {
+        border-radius: 42px;
+        min-height: auto;
+        padding: 0 22px 28px;
+      }
+
+      footer {
+        padding: 0 28px;
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="slide">
+    <section class="stage">
+      <div>
+        <h1>There' no magic!</h1>
+        <p class="subtitle">3x3 kernel을 직접 생각해보고 테스트해보자.</p>
+
+        <p class="prompt">
+          <span>&lt;usr&gt;</span><span>ad-hoc으로</span> <span>생각해봐</span><span>&lt;/usr&gt;</span><span>&lt;conv&gt;</span>...
+        </p>
+
+        <div class="workspace">
+          <div class="grid-block">
+            <div class="label">이미지 입력</div>
+            <div class="pixel-grid" id="pixelGrid" aria-label="click cells to edit input image"></div>
+          </div>
+
+          <div class="arrow" aria-hidden="true"></div>
+
+          <div class="grid-block">
+            <div class="label">conv 결과</div>
+            <div class="result-grid" id="resultGrid" aria-label="convolution output"></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="todo">
+        <div class="todo-title">TODO</div>
+        <div class="kernel-panel">
+          <div class="label">3x3 kernel</div>
+          <div class="kernel-grid" id="kernelGrid"></div>
+          <div class="actions">
+            <button type="button" class="tool-button hot" id="applyButton">테스트</button>
+            <button type="button" class="tool-button" id="clearButton">지우기</button>
+            <button type="button" class="tool-button" id="shapeButton">도형 바꾸기</button>
+          </div>
+          <div class="formula" id="formula">
+            kernel을 직접 입력하고 테스트해보자.
+          </div>
+        </div>
+
+        <ul class="examples">
+          <li data-n="1">주변부와 평균 낸 이미지</li>
+          <li data-n="2">가로 <span class="hl">edge</span> 검출</li>
+          <li data-n="3"><span class="hl">corner</span> 검출</li>
+        </ul>
+      </aside>
+    </section>
+
+    <footer>
+      <span>2026 윤승현</span>
+      <span>ML기초 시그 데이터의 모양</span>
+    </footer>
+  </main>
+
+  <script>
+    const size = 7;
+    const pixelLevels = [0, 0.25, 0.5, 0.75, 1];
+    const shapes = [
+      [
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 1, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+      ],
+      [
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 0],
+      ],
+      [
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 1, 0],
+      ],
+    ];
+
+    const pixelGrid = document.getElementById("pixelGrid");
+    const resultGrid = document.getElementById("resultGrid");
+    const kernelGrid = document.getElementById("kernelGrid");
+
+    let image = shapes[0].map(row => row.slice());
+    let shapeIndex = 0;
+
+    function createGrids() {
+      pixelGrid.innerHTML = "";
+      resultGrid.innerHTML = "";
+      kernelGrid.innerHTML = "";
+
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          const pixel = document.createElement("button");
+          pixel.type = "button";
+          pixel.className = "pixel";
+          pixel.setAttribute("aria-label", `input ${x}, ${y}`);
+          pixel.addEventListener("click", () => {
+            const current = pixelLevels.findIndex(level => Math.abs(level - image[y][x]) < 0.001);
+            image[y][x] = pixelLevels[(current + 1) % pixelLevels.length];
+            renderImage();
+            convolve();
+          });
+          pixelGrid.appendChild(pixel);
+
+          const result = document.createElement("div");
+          result.className = "result";
+          resultGrid.appendChild(result);
+        }
+      }
+
+      for (let i = 0; i < 9; i += 1) {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.step = "0.01";
+        input.inputMode = "decimal";
+        input.setAttribute("aria-label", `kernel ${i + 1}`);
+        input.addEventListener("input", convolve);
+        kernelGrid.appendChild(input);
+      }
+    }
+
+    function renderImage() {
+      Array.from(pixelGrid.children).forEach((cell, index) => {
+        const y = Math.floor(index / size);
+        const x = index % size;
+        const value = image[y][x];
+        const shade = Math.round(255 - value * 255);
+        cell.style.background = `rgb(${shade}, ${shade}, ${shade})`;
+        cell.dataset.value = value > 0 && value < 1 ? value.toFixed(2) : "";
+      });
+    }
+
+    function readKernel() {
+      const values = Array.from(kernelGrid.children).map(input => Number(input.value) || 0);
+      return [
+        values.slice(0, 3),
+        values.slice(3, 6),
+        values.slice(6, 9),
+      ];
+    }
+
+    function convolve() {
+      const kernel = readKernel();
+      const values = [];
+
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          let sum = 0;
+          for (let ky = -1; ky <= 1; ky += 1) {
+            for (let kx = -1; kx <= 1; kx += 1) {
+              const iy = y + ky;
+              const ix = x + kx;
+              const pixel = iy >= 0 && iy < size && ix >= 0 && ix < size ? image[iy][ix] : 0;
+              sum += pixel * kernel[ky + 1][kx + 1];
+            }
+          }
+          values.push(sum);
+        }
+      }
+
+      Array.from(resultGrid.children).forEach((cell, index) => {
+        const value = values[index];
+        const pixelValue = Math.max(0, Math.min(1, value));
+        const shade = Math.round(255 - pixelValue * 255);
+        cell.style.background = `rgb(${shade}, ${shade}, ${shade})`;
+        cell.dataset.value = Math.abs(value) > 0.005 ? value.toFixed(1) : "";
+        cell.style.outline = value < 0 ? "4px solid #ffb000" : "0";
+      });
+    }
+
+    document.getElementById("applyButton").addEventListener("click", convolve);
+
+    document.getElementById("clearButton").addEventListener("click", () => {
+      image = Array.from({ length: size }, () => Array(size).fill(0));
+      renderImage();
+      convolve();
+    });
+
+    document.getElementById("shapeButton").addEventListener("click", () => {
+      shapeIndex = (shapeIndex + 1) % shapes.length;
+      image = shapes[shapeIndex].map(row => row.slice());
+      renderImage();
+      convolve();
+    });
+
+    createGrids();
+    renderImage();
+    convolve();
+  </script>
+</body>
+</html>
