@@ -33,9 +33,9 @@ _궁금증을 가질만한 질문들_
 
 ![loss_landscape](./week01/docs/loss_landscape.jpg)
 
-GD를 직관적으로 이해하기 위해 parameter space에서 정의되는 loss function을 생각해보자. 특정 parameter 벡터가 입력되면 loss 값이 출력으로 나오는 function 말이다. 특정 시점에서 parameter 입력이 주어졌을 때 GD를 통해서 우리는 loss가 최소화되는 지점에 다다르고 싶어한다. 모든 parameter space에 대한 탐색은 costy하고 in-tractable하기 때문에 iteration을 거듭하면서 더 나은 결과를 기대하는 것이 Gradient Descent(Back propagation)이다.
+GD를 직관적으로 이해하기 위해 parameter space에서 정의되는 loss function을 생각해보자. 특정 parameter 벡터가 입력되면 loss 값이 출력으로 나오는 function 말이다. 특정 시점에서 parameter 입력이 주어졌을 때 우리는 loss가 최소화되는 지점에 다다르고 싶어한다. 모든 parameter space에 대한 탐색은 costy하고 in-tractable하기 때문에 iteration을 거듭하면서 더 나은 결과를 기대한다. 이때 Backpropagation은 loss에 대한 gradient를 chain rule로 효율적으로 계산하는 방법이고, Gradient Descent는 그 gradient의 반대 방향으로 parameter를 조금씩 update하는 최적화 규칙이다.
 
-위의 그림은 2차원보다 큰 parameter space에서 [loss surface를 시각화하는 방법에 대해서 제시한 논문](https://arxiv.org/pdf/1712.09913)을 참고하여 구현한 것이다. (50, 50)은 네트워크의 원점으로 이 주변을 탐색하면서 얻어진 loss 값이 색깔에 따라서 표현되어 있음을 확인할 수 있다. '지형이 고른 형태를 보일수록 안정적인 학습이 가능할 것이다.'와 같이 loss surface의 시각화를 통해서 여러 정보를 얻을 수 있다. 아래는 이 그림을 3차원으로 나타낸 것으로 gradient(=학습 방향)이 loss가 감소하는 방향인 것을 실험적으로도 얻을 수 있다.(수학적인 방법이 궁금하다면 loss function을 스칼라 출력을 내는 벡터 함수라고 생각한 후에 이의 gradient vector을 생각해보기를!)
+위의 그림은 2차원보다 큰 parameter space에서 [loss surface를 시각화하는 방법에 대해서 제시한 논문](https://arxiv.org/pdf/1712.09913)을 참고하여 구현한 것이다. 그림의 (50, 50)은 parameter space의 원점이 아니라, 기준이 되는 학습된 parameter 벡터를 2개의 방향 벡터가 만드는 평면 위에 놓았을 때의 중앙 좌표에 가깝다. 주변 격자는 그 기준 parameter에 두 방향의 perturbation을 더하고 빼며 얻은 loss 값이다. '지형이 고른 형태를 보일수록 안정적인 학습이 가능할 것이다.'와 같이 loss surface의 시각화를 통해서 여러 정보를 얻을 수 있다. 아래는 이 그림을 3차원으로 나타낸 것이다. gradient는 loss가 가장 빠르게 증가하는 방향이고, 학습 update는 보통 그 반대 방향(-gradient)으로 움직인다.(수학적인 방법이 궁금하다면 loss function을 스칼라 출력을 내는 벡터 함수라고 생각한 후에 이의 gradient vector을 생각해보기를!)
 
 | ReLU                             | Tanh                             |
 | -------------------------------- | -------------------------------- |

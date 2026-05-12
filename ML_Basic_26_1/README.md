@@ -1,7 +1,16 @@
+## Interactive textbook
+
+-   PPT 스타일을 그대로 디지털화한 Svelte 교재 앱: `cd interactive-textbook && npm install && npm run dev`
+-   `mlsig.mmeme.org`/`nn-complete` toy project 경험은 링크 참고가 아니라 앱 내부 mini lesson/widget으로 흡수한다.
+-   변환 계획과 챕터 맵: [BUILD_PLAN.md](BUILD_PLAN.md)
+-   PDF/README 변환 소스맵: [textbook/SOURCE_MAP.md](textbook/SOURCE_MAP.md)
+-   이전 정적 프로토타입: [textbook/index.html](textbook/index.html)
+-   현재 Svelte 구현: [interactive-textbook](interactive-textbook)
+
 ## 1주차: \_\_init\_\_
 
 -   명령형/선언형 프로그래밍: 인공지능=What에 대해 생각해보자.
--   학습방법=universal/구조=ad-hoc: gradient descent!
+-   학습 loop=loss 정의 -> backprop으로 gradient 계산 -> optimizer로 update / 구조=ad-hoc.
 -   toy game: [해보자!](w1.mlsig.mmeme.org/) -> 생각보다 어려움!
 -   과제: 4 element sorting을 만들어보자.
 
