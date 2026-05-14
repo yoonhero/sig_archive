@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>시각화 고고학 - 11x11 Puzzle</title>
+  <style>
+    :root {
+      --ink: #000;
+      --paper: #fff;
+      --blue: #dff4ff;
+      --orange: #ffb000;
+      --red: #ff2a12;
+      --green: #16b600;
+      --cyan: #027dc8;
+      --muted: #666;
+      --cell: 25px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .slide {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 1fr 72px;
+      background: var(--paper);
+    }
+
+    .stage {
+      padding: 34px 40px 28px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: clamp(44px, 5vw, 78px);
+      line-height: 0.94;
+      letter-spacing: 0;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      margin: 0 0 20px;
+      font-size: 30px;
+      line-height: 1.22;
+      font-weight: 800;
+    }
+
+    .prompt {
+      margin: 20px 0 16px;
+      font-size: 27px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .prompt span:nth-child(1) {
+      color: var(--red);
+    }
+
+    .prompt span:nth-child(2) {
+      color: #ff8500;
+    }
+
+    .prompt span:nth-child(3) {
+      color: var(--orange);
+    }
+
+    .prompt span:nth-child(4) {
+      color: var(--green);
+    }
+
+    .prompt span:nth-child(5) {
+      color: var(--cyan);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: auto;
+      gap: 14px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    .grid-block {
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+    }
+
+    .label {
+      font-size: 23px;
+      font-weight: 850;
+    }
+
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(11, var(--cell));
+      grid-template-rows: repeat(11, var(--cell));
+      gap: 2px;
+      padding: 5px;
+      border: 5px solid var(--ink);
+      background: var(--paper);
+    }
+
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      border: 2px solid var(--ink);
+      background: var(--paper);
+      color: var(--ink);
+      cursor: pointer;
+      position: relative;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .cell[data-value="1"] {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    .cell[data-value="2"] {
+      background: var(--orange);
+      color: var(--ink);
+    }
+
+    .cell.goal {
+      box-shadow: inset 0 0 0 4px var(--red);
+    }
+
+    .tool-button {
+      min-height: 44px;
+      border: 4px solid var(--ink);
+      color: var(--ink);
+      background: var(--paper);
+      padding: 6px 14px;
+      font-size: 20px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .tool-button.hot {
+      color: var(--paper);
+      background: var(--ink);
+    }
+
+    .todo {
+      background: var(--blue);
+      border-radius: 58px;
+      padding: 0 24px 26px;
+      min-height: 650px;
+      align-self: stretch;
+    }
+
+    .todo-title {
+      display: table;
+      margin: 0 auto 24px;
+      padding: 8px 14px 10px;
+      color: var(--paper);
+      background: var(--ink);
+      font-size: 44px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .panel {
+      display: grid;
+      gap: 18px;
+    }
+
+    .actions,
+    .palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .palette .tool-button {
+      min-width: 70px;
+    }
+
+    .palette .active {
+      background: var(--orange);
+    }
+
+    .formula {
+      margin-top: 4px;
+      padding: 18px 20px;
+      color: var(--paper);
+      background: var(--ink);
+      font-size: 20px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .result-value {
+      display: grid;
+      place-items: center;
+      min-height: 132px;
+      border: 6px solid var(--ink);
+      color: var(--ink);
+      background: var(--paper);
+      font-size: 82px;
+      line-height: 1;
+      font-weight: 950;
+    }
+
+    .result-value.ok {
+      background: var(--orange);
+    }
+
+    .formula .ok {
+      color: var(--green);
+    }
+
+    .formula .bad {
+      color: var(--red);
+    }
+
+    footer {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 72px;
+      color: var(--paper);
+      background: var(--ink);
+      font-size: 26px;
+      font-weight: 650;
+    }
+
+    @media (max-width: 1160px) {
+      :root {
+        --cell: 27px;
+      }
+
+      .stage {
+        padding: 32px 24px 34px;
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      h1 {
+        font-size: 52px;
+      }
+
+      .subtitle,
+      .prompt {
+        font-size: 27px;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        justify-items: center;
+      }
+
+      .todo {
+        border-radius: 38px;
+        min-height: auto;
+        padding: 0 22px 28px;
+      }
+
+      footer {
+        padding: 0 28px;
+        font-size: 19px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="slide">
+    <section class="stage">
+      <div>
+        <h1>Jungle disk</h1>
+        <p class="subtitle">11x11 map에 0, 1, 2를 직접 채우고 결과값을 확인해보자.</p>
+
+        <p class="prompt">
+          <span>&lt;usr&gt;</span><span>이 신경망이</span> <span>무슨 일을 하는지</span><span>&lt;/usr&gt;</span><span>&lt;disk&gt;</span>...
+        </p>
+
+        <div class="workspace">
+          <div class="grid-block">
+            <div class="label">입력 X₀</div>
+            <div class="map-grid" id="inputGrid" aria-label="11 by 11 editable input map"></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="todo">
+        <div class="todo-title">TEST</div>
+        <div class="panel">
+          <div>
+            <div class="label">채울 값</div>
+            <div class="palette" id="palette">
+              <button type="button" class="tool-button active" data-value="0">0</button>
+              <button type="button" class="tool-button" data-value="1">1</button>
+              <button type="button" class="tool-button" data-value="2">2</button>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="tool-button hot" id="runButton">테스트</button>
+            <button type="button" class="tool-button" id="clearButton">지우기</button>
+          </div>
+
+          <div class="formula">result</div>
+          <div class="result-value" id="statusBox" aria-live="polite"></div>
+        </div>
+      </aside>
+    </section>
+
+    <footer>
+      <span>2026 윤승현</span>
+      <span>ML기초 시그 시각화 고고학</span>
+    </footer>
+  </main>
+
+  <script>
+    const size = 11;
+    const steps = 10;
+    const directions = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
+    const initialMap = [
+      "20000000000",
+      "11101111110",
+      "00001000000",
+      "01111011111",
+      "00000010000",
+      "01111110110",
+      "00000100100",
+      "11110111100",
+      "00010000010",
+      "01011111010",
+      "01000000000",
+    ];
+
+    const inputGrid = document.getElementById("inputGrid");
+    const palette = document.getElementById("palette");
+    const statusBox = document.getElementById("statusBox");
+
+    let paintValue = 0;
+    let image = parseMap(initialMap);
+
+    function parseMap(rows) {
+      return rows.map(row => row.split("").map(Number));
+    }
+
+    function cloneGrid(grid) {
+      return grid.map(row => row.slice());
+    }
+
+    function runBfs(grid) {
+      const finalGrid = cloneGrid(grid);
+      const distance = Array.from({ length: size }, () => Array(size).fill(-1));
+      const frontier = [];
+
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          if (grid[y][x] === 2) {
+            distance[y][x] = 0;
+            frontier.push([x, y]);
+          }
+        }
+      }
+
+      for (let head = 0; head < frontier.length; head += 1) {
+        const [x, y] = frontier[head];
+        if (distance[y][x] >= steps) {
+          continue;
+        }
+
+        for (const [dx, dy] of directions) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= size || ny < 0 || ny >= size) {
+            continue;
+          }
+          if (grid[ny][nx] !== 0 || distance[ny][nx] !== -1) {
+            continue;
+          }
+          distance[ny][nx] = distance[y][x] + 1;
+          finalGrid[ny][nx] = 2;
+          frontier.push([nx, ny]);
+        }
+      }
+
+      return { finalGrid, distance };
+    }
+
+    function createGrids() {
+      inputGrid.innerHTML = "";
+
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          const inputCell = document.createElement("button");
+          inputCell.type = "button";
+          inputCell.className = "cell";
+          inputCell.setAttribute("aria-label", `input row ${y + 1}, column ${x + 1}`);
+          inputCell.addEventListener("click", () => {
+            image[y][x] = paintValue;
+            render();
+          });
+          inputCell.addEventListener("contextmenu", event => {
+            event.preventDefault();
+            image[y][x] = (image[y][x] + 1) % 3;
+            render();
+          });
+          inputGrid.appendChild(inputCell);
+        }
+      }
+    }
+
+    function renderCells(container, grid) {
+      Array.from(container.children).forEach((cell, index) => {
+        const y = Math.floor(index / size);
+        const x = index % size;
+        const value = grid[y][x];
+        cell.textContent = String(value);
+        cell.dataset.value = String(value);
+        cell.classList.toggle("goal", x === size - 1 && y === size - 1);
+      });
+    }
+
+    function renderStatus(result) {
+      const goal = result.finalGrid[size - 1][size - 1];
+      statusBox.textContent = String(goal);
+      statusBox.classList.toggle("ok", goal === 2);
+    }
+
+    function render() {
+      const result = runBfs(image);
+      renderCells(inputGrid, image);
+      renderStatus(result);
+    }
+
+    palette.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button) {
+        return;
+      }
+      paintValue = Number(button.dataset.value);
+      Array.from(palette.children).forEach(child => {
+        child.classList.toggle("active", child === button);
+      });
+    });
+
+    document.getElementById("runButton").addEventListener("click", render);
+
+    document.getElementById("clearButton").addEventListener("click", () => {
+      image = Array.from({ length: size }, () => Array(size).fill(0));
+      render();
+    });
+
+    createGrids();
+    render();
+  </script>
+</body>
+</html>
